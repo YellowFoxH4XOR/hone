@@ -63,10 +63,14 @@ run(async (input) => {
     profile.counters.gates_answered = (profile.counters.gates_answered || 0) + 1;
 
     // F7: answering the gate at a low hint level counts as working it
-    // independently; leaning on a high hint level counts as assisted.
+    // independently; leaning on a high hint level counts as assisted. But a
+    // rubber-stamp reply ("ok", "you decide") is not engagement — gate the
+    // profile WRITE on a substantive answer, so nobody graduates a skill by
+    // pressing through the gate without thinking. The gate still opened on any
+    // reply; only the skill signal is withheld.
     const baseHint = config.hone.hint_level;
-    const independent = baseHint <= skills.INDEPENDENT_HINT_CEILING;
-    if (session.category) {
+    if (session.category && skills.isSubstantiveAnswer(prompt)) {
+      const independent = baseHint <= skills.INDEPENDENT_HINT_CEILING;
       skills.recordOutcome(profile, session.category, {
         independent,
         at: new Date().toISOString(),

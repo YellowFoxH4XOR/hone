@@ -178,7 +178,7 @@ test('F6 reflection never fires for an uncoached session', () => {
   assert.strictEqual(stop, null, 'no coached work -> no reflection');
 });
 
-test('F7 skipping records an assisted signal that lowers proficiency', () => {
+test('F7 first skip is penalty-free (grace reserve); it unblocks but does not deskill', () => {
   runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
   runHook('user-prompt-submit.ts', {
     session_id: SESSION, cwd: tmpDir,
@@ -186,8 +186,13 @@ test('F7 skipping records an assisted signal that lowers proficiency', () => {
   });
   runCtl(['skip']);
   const profile = profileFile();
-  assert.strictEqual(profile.skills['concurrency']?.assisted_reps, 1);
-  assert.ok(profile.skills['concurrency']!.proficiency < 50, 'skip lowered proficiency');
+  // The skip is counted and unblocks, but within the grace reserve it logs no
+  // assisted rep and does not move proficiency — an escape hatch is not a
+  // deskilling signal.
+  assert.strictEqual(profile.counters.skipped, 1);
+  assert.strictEqual(profile.skills['concurrency']?.assisted_reps ?? 0, 0);
+  assert.strictEqual(profile.skills['concurrency']?.grace_skips_used, 1);
+  assert.strictEqual(profile.skills['concurrency']?.proficiency ?? 50, 50, 'grace skip leaves proficiency neutral');
 });
 
 test('the docs-variant user_input field is honored too', () => {

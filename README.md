@@ -102,7 +102,7 @@ ship a compiled fallback.)
 | Command | Effect |
 |---|---|
 | `/hone:status` | Hint level, budget usage, gate state, skill profile |
-| `/hone:skip` | Skip the gate for the current task — implement directly |
+| `/hone:skip` | Skip the gate for the current task — implement directly (first couple per topic are penalty-free) |
 | `/hone:wrong [note]` | Report a misclassification — logs it locally, unblocks the gate with no proficiency penalty |
 | `/hone:interview [topic]` | Interview mode: Claude probes your understanding, no code written (`stop` to end) |
 | `/hone:dashboard` | Local skill-profile dashboard at `http://127.0.0.1:4173` (`stop` to end) |
@@ -192,7 +192,7 @@ generated from *your* repo). See `docs/PRD.md`.
 ## Development
 
 ```
-npm test             # 90 tests: unit, labeled-dataset accuracy, end-to-end hooks
+npm test             # 100+ tests: unit, labeled-dataset accuracy, end-to-end hooks
 npm run typecheck    # tsc --noEmit (strict, erasable-syntax-only)
 ```
 

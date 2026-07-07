@@ -6,6 +6,21 @@ All notable changes to Hone are documented here. This project follows
 ## [Unreleased]
 
 ### Fixed
+- **Classifier ignored a closing instruction after a leading question.** The
+  imperative/interrogative checks were `^`-anchored to the whole prompt, so
+  "why does this deadlock? just add a timeout for now" scored as pure learning
+  and opened the gate — even though the user had already decided. A decisive
+  closing clause ("just add X", "go ahead and Y") is now a strong execution
+  signal and cancels the "this is a question" bonus. On the held-out set this is
+  0% false-coach with ~92% recall.
+- **A rubber-stamp gate reply was credited as independent work.** `independent`
+  was computed purely from the configured hint level, and `markAnswered()`
+  accepted any next prompt — so at the shipped hint-0 default a one-word "ok"
+  recorded an independent rep and moved proficiency toward permanent graduation
+  (a proficiency-gaming hole; Baker et al. 2004; Neagu et al. 2026). The gate
+  still opens on any reply, but the skill-profile *write* now requires a
+  substantive answer (`isSubstantiveAnswer`); a terse but real approach still
+  counts.
 - **Graduation was a permanent badge (irreversible-graduation bug).** Idle
   decay was capped at 15 points, exactly `100 − GRADUATE_PROFICIENCY(85)`, so a
   category that ever hit proficiency 100 could never decay below the graduation
@@ -31,6 +46,21 @@ All notable changes to Hone are documented here. This project follows
   likely to take.
 
 ### Changed
+- **Proficiency now uses Bayesian Knowledge Tracing, not a flat ±6 nudge.** A
+  principled belief update (Corbett & Anderson 1994) with fixed guess/slip/
+  transit parameters — fixed rather than per-user-fit because per-category
+  events are far too sparse to fit (Pradhan et al. 2026). The working
+  probability is clamped off 0/1 before the Bayes step to avoid the absorbing
+  state at p=1 that would freeze a maxed skill (Beck & Chang 2007) — an assisted
+  rep now lowers proficiency even from 100.
+- **Grace-skip reserve.** The first couple of `/hone:skip` uses per category are
+  penalty-free — an occasional escape hatch isn't deskilling (Sharif & Shu 2017
+  on capped "emergency reserves"; Lally et al. 2010 on missed reps not derailing
+  habits). Past the reserve, a skip is an assisted signal as before.
+- **Held-out classifier eval + honest accuracy claim.** Added a 30-prompt
+  held-out set written after the signals were frozen and never used to tune
+  them; the README now cites its numbers (0% false-coach, ~92% recall) instead
+  of the iteratively-tuned in-repo sets.
 - **Cold-start guidance instead of hint-0 for unknown topics.** Minimal-guidance
   coaching is the wrong default for a topic the user has never worked — worked
   examples beat unguided problem-solving for novices (Kirschner, Sweller & Clark

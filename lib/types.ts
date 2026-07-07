@@ -66,8 +66,9 @@ export interface SkillStats {
   proficiency: number;
   reps: number; // coached tasks in this category
   independent_reps: number; // gate answered at a low hint level (worked it themselves)
-  assisted_reps: number; // skipped, or leaned on a high hint level
+  assisted_reps: number; // skipped past the grace reserve, or leaned on a high hint level
   last_updated: string | null;
+  grace_skips_used?: number; // penalty-free /hone:skip uses spent in this category
 }
 
 export interface Profile {
