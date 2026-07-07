@@ -137,6 +137,28 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
+// F6/spacing: a skill whose idle decay has pulled it at least STALE_DROP points
+// below its raw score has gone stale enough to be worth a nudge — spaced review
+// at the point of impending forgetting is exactly what the spacing effect
+// rewards (Cepeda et al. 2006, 317-experiment meta-analysis). Reuses the decay
+// math already stored on the profile; no new capture surface. Most-stale first.
+export const STALE_DROP = 8;
+
+export function staleSkills(
+  profile: Profile,
+  now = new Date(),
+): Array<{ category: string; raw: number; decayed: number }> {
+  const out: Array<{ category: string; raw: number; decayed: number }> = [];
+  for (const category of Object.keys(profile.skills ?? {})) {
+    const s = profile.skills?.[category];
+    if (!s || !s.last_updated) continue;
+    const raw = proficiencyOf(profile, category);
+    const decayed = decayedProficiency(profile, category, now);
+    if (raw - decayed >= STALE_DROP) out.push({ category, raw, decayed });
+  }
+  return out.sort((a, b) => b.raw - b.decayed - (a.raw - a.decayed));
+}
+
 // One Bayesian Knowledge Tracing step: update belief that the skill is known,
 // given a correct (independent) or incorrect (assisted) observation, then apply
 // the learning-transit probability. Working probability is clamped off 0/1 to

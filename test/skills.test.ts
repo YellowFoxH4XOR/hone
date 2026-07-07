@@ -6,6 +6,8 @@ import {
   bktUpdate,
   isSubstantiveAnswer,
   proficiencyOf,
+  staleSkills,
+  STALE_DROP,
   adaptiveAdjustment,
   effectiveHint,
   coachingHint,
@@ -246,6 +248,28 @@ test('F9: debugging earns independence more slowly than other skills', () => {
   assert.strictEqual(graduated(p, 'debugging'), false, 'debugging needs more reps');
   p.skills['debugging']!.reps = DEBUG_GRADUATE_REPS;
   assert.strictEqual(graduated(p, 'debugging'), true);
+});
+
+test('staleSkills surfaces only skills that decayed past the threshold, most-stale first', () => {
+  const p = freshProfile();
+  const monthsAgo = new Date(Date.now() - 20 * 7 * 24 * 3600 * 1000).toISOString();
+  const fresh = new Date().toISOString();
+  // Idle & strong -> decays well past the threshold.
+  p.skills['concurrency'] = { proficiency: 90, reps: 12, independent_reps: 12, assisted_reps: 0, last_updated: monthsAgo };
+  // Idle a little less far -> smaller drop, but still over the threshold.
+  const weeksAgo = new Date(Date.now() - 12 * 7 * 24 * 3600 * 1000).toISOString();
+  p.skills['security'] = { proficiency: 80, reps: 10, independent_reps: 10, assisted_reps: 0, last_updated: weeksAgo };
+  // Recently active -> not stale.
+  p.skills['debugging'] = { proficiency: 88, reps: 12, independent_reps: 12, assisted_reps: 0, last_updated: fresh };
+  // Never recorded (no last_updated) -> never stale.
+  p.skills['performance'] = { proficiency: 70, reps: 2, independent_reps: 2, assisted_reps: 0, last_updated: null };
+
+  const stale = staleSkills(p);
+  const names = stale.map((s) => s.category);
+  assert.ok(names.includes('concurrency') && names.includes('security'));
+  assert.ok(!names.includes('debugging') && !names.includes('performance'));
+  assert.strictEqual(stale[0]!.category, 'concurrency', 'most-stale first');
+  assert.ok(stale.every((s) => s.raw - s.decayed >= STALE_DROP));
 });
 
 test('ensureSkill self-heals a corrupt/hand-edited skill entry', () => {
