@@ -76,6 +76,34 @@ test('runtime state overrides config; clamping applies', () => {
   assert.strictEqual(eff2.hone.hint_level, 0);
 });
 
+test('/hone:budget and /hone:reflection runtime overrides win over config, with clamping/validation', () => {
+  const base = configLib.loadConfig({});
+
+  const eff = configLib.effective(base, { learning_budget: 30, reflection: 'off' });
+  assert.strictEqual(eff.hone.learning_budget, 30);
+  assert.strictEqual(eff.hone.reflection, 'off');
+
+  // Out-of-range / garbage runtime values fall back to the shipped default,
+  // never throw, never escape unclamped.
+  const outOfRange = configLib.effective(base, { learning_budget: 500 });
+  assert.strictEqual(outOfRange.hone.learning_budget, 100);
+  const garbageReflection = configLib.effective(base, { reflection: 'sometimes' as never });
+  assert.strictEqual(garbageReflection.hone.reflection, 'on');
+
+  // No override -> config.yaml's own values pass through untouched.
+  const untouched = configLib.effective(base, {});
+  assert.strictEqual(untouched.hone.learning_budget, 100);
+  assert.strictEqual(untouched.hone.reflection, 'on');
+});
+
+test('clampBudget: fallback to 100 on non-finite input, clamps to [0, 100] otherwise', () => {
+  assert.strictEqual(configLib.clampBudget('nonsense'), 100);
+  assert.strictEqual(configLib.clampBudget(undefined), 100);
+  assert.strictEqual(configLib.clampBudget(-5), 0);
+  assert.strictEqual(configLib.clampBudget(250), 100);
+  assert.strictEqual(configLib.clampBudget('35'), 35);
+});
+
 test('ensureDefaultConfigFile writes once and the result round-trips', () => {
   assert.strictEqual(configLib.ensureDefaultConfigFile(), true);
   assert.strictEqual(configLib.ensureDefaultConfigFile(), false); // second call no-op

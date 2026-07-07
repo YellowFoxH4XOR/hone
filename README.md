@@ -93,6 +93,8 @@ ship a compiled fallback.)
 | `/hone:interview [topic]` | Interview mode: Claude probes your understanding, no code written (`stop` to end) |
 | `/hone:dashboard` | Local skill-profile dashboard at `http://127.0.0.1:4173` (`stop` to end) |
 | `/hone:hint <0-5>` | Set the hint level |
+| `/hone:budget <0-100>` | Set the learning budget (% of eligible learning tasks coached) |
+| `/hone:reflection <off\|optional\|on>` | Set the reflection mode |
 | `/hone:off` / `/hone:on` | Disable / enable entirely |
 
 ## Configuration
@@ -120,6 +122,12 @@ questions-only, reflection on — because Hone exists to make you think. If that
 more friction than you want, dial `learning_budget` down (at 20% exactly the
 5th, 10th, 15th… eligible learning task gets coached — the ratio is enforced
 exactly and deterministically, never randomly) and raise `hint_level`.
+
+Every one of these is also an in-chat lever, no editing config.yaml required:
+`/hone:budget <0-100>`, `/hone:hint <0-5>`, and `/hone:reflection <off|optional|on>`
+all take effect immediately (they override config.yaml the same way
+`/hone:on` / `/hone:off` already do). Full disable is still one command away:
+`/hone:off`.
 
 ## What gets classified as "learning"?
 
@@ -165,7 +173,7 @@ generated from *your* repo). See `docs/PRD.md`.
 ## Development
 
 ```
-npm test             # 52 tests: unit, labeled-dataset accuracy, end-to-end hooks
+npm test             # 90 tests: unit, labeled-dataset accuracy, end-to-end hooks
 npm run typecheck    # tsc --noEmit (strict, erasable-syntax-only)
 ```
 

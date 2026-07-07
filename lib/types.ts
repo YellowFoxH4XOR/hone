@@ -90,6 +90,11 @@ export interface AdaptiveAdjustment {
 export interface RuntimeState {
   enabled?: boolean;
   hint_level?: number;
+  // De-escalation levers (/hone:budget, /hone:reflection) — same
+  // runtime-overrides-config pattern as hint_level, so neither requires
+  // hand-editing config.yaml.
+  learning_budget?: number;
+  reflection?: 'off' | 'optional' | 'on';
 }
 
 export interface HoneSettings {

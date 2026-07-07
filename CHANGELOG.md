@@ -3,6 +3,32 @@
 All notable changes to Hone are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- **`/hone:off` → `/hone:on` stale-gate hijack.** `setEnabled()` only ever
+  wrote `state.json`; it never touched session state, so a Solution Gate left
+  `pending` at the moment of `/hone:off` survived the round trip. The next
+  prompt after `/hone:on` — however unrelated to the original coached task —
+  was silently treated as "the answer" to that stale gate: marked answered,
+  coached on a category the user wasn't thinking about, and logged a skill
+  signal off zero relevant input. `/hone:off` now resets a still-open gate for
+  the current session to `idle` (new `gate.reset()`) before writing the
+  runtime toggle, so `/hone:on` always starts clean. This landed right on the
+  exact self-help action (disable, then re-enable) a frustrated user is most
+  likely to take.
+
+### Added
+- **`/hone:budget <0-100>`** and **`/hone:reflection <off|optional|on>`** —
+  in-chat de-escalation levers for the learning budget and reflection recap,
+  mirroring the existing `/hone:hint` runtime-override pattern (take effect
+  immediately, no `config.yaml` editing required). Previously `/hone:off` was
+  the only in-chat lever between "tolerate everything" and "disable
+  entirely"; `RuntimeState` gains `learning_budget` and `reflection`, and
+  `config.effective()` now applies the same runtime-overrides-config
+  precedence to them that `hint_level` already had. `/hone:status` now also
+  reports the current reflection mode.
+
 ## [0.4.0] — 2026-07-07
 
 Stage 2 — the loop closes: the skill profile now feeds back into how much Hone
