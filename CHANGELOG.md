@@ -3,6 +3,28 @@
 All notable changes to Hone are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-07-07
+
+Assertive defaults. Hone now leans into the learning hypothesis out of the box:
+if the gate never fires, the product never gets tested. Everything remains
+user-configurable — dial it down in `~/.claude/hone/config.yaml` if it's too much.
+
+### Changed
+- **`learning_budget` default: 20 → 100.** Every eligible learning task is
+  coached by default. The exact deterministic ratio still applies at any lower
+  setting.
+- **`hint_level` default: 1 → 0.** Questions-only coaching by default — the
+  level that forces the most thinking. The 0–5 dial is unchanged.
+- **`reflection` default: `optional` → `on`.** The once-per-session recap after
+  coached work is now asked plainly instead of framed as skippable; set
+  `optional` or `off` to soften it. `/hone:skip` remains available on every
+  gated task — the escape hatch is untouched.
+- Malformed/missing config values now fall back to the new defaults
+  (budget 100, hint 0) instead of the old ones.
+- Existing users' `config.yaml` files are untouched — explicit settings always
+  win over defaults; only fresh installs (or deleted configs) get the new
+  behavior.
+
 ## [0.2.0] — 2026-07-07
 
 Stage 1 — coaching beyond the gate. All additive; existing behavior and the

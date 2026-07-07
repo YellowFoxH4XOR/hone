@@ -110,12 +110,12 @@ export function autoFeedbackContext(opts: { category: string; reviewOnly: boolea
 export function reflectionPrompt(opts: { category: string }): string {
   return [
     '<hone-reflection>',
-    `Hone: a coached ${opts.category} task just wrapped. Before ending, invite a short reflection (this fires once per session):`,
+    `Hone: a coached ${opts.category} task just wrapped. Before ending, ask a brief reflection to consolidate the learning:`,
     'Ask the user, warmly and briefly, 1-2 of these — whichever fit what they just did:',
     '- What was the hardest part, and what finally made it click?',
     '- What would you do differently if you hit this again?',
     '- In one or two sentences, explain the solution back without looking.',
-    'Keep it to a couple of sentences of framing. Make clear it is optional — if they would rather just move on, that is completely fine and they should say so.',
+    'Keep it to a couple of sentences of framing.',
     '</hone-reflection>',
   ].join('\n');
 }

@@ -21,7 +21,8 @@ formatting — vanilla Claude Code, zero added friction, ~40ms of routing overhe
 
 When you hit a **learning-worthy task** — a race condition, an architecture call, a
 "why does this only fail in CI?" — and you're within your **learning budget**
-(default: 20% of eligible tasks), Hone flips the interaction:
+(default: 100%, i.e. every learning task; dial it down if that's too much), Hone
+flips the interaction:
 
 1. **Solution Gate** — before writing any code, Claude asks for *your* approach
    first (max 3 sharp questions). File edits are blocked until you've answered.
@@ -29,8 +30,8 @@ When you hit a **learning-worthy task** — a race condition, an architecture ca
 
    | Level | Behavior |
    |---|---|
-   | 0 | Questions only |
-   | 1 | Small nudges *(default)* |
+   | 0 | Questions only *(default)* |
+   | 1 | Small nudges |
    | 2 | High-level ideas, no code |
    | 3 | Pseudocode |
    | 4 | Partial implementation, you finish it |
@@ -47,9 +48,9 @@ vanilla Claude Code, and nothing counts against the budget.
 - **Auto-feedback** — after code is written during a coached task, Hone gives a
   short senior-lens review (edge cases, failure modes, one thing to check) so
   you learn what to look for. It never silently rewrites your code.
-- **Reflection** — once per coached session, Hone invites a quick recap ("what
-  was hardest? explain it back without looking"). Always optional; set
-  `reflection: off` to disable.
+- **Reflection** — once per coached session, Hone asks for a quick recap ("what
+  was hardest? explain it back without looking"). On by default — reflection is
+  the consolidation step; set `reflection: optional` or `off` to soften it.
 - **Skill profile & adaptive coaching** — Hone keeps a per-category proficiency
   profile (see `/hone:status`) that moves as you work: up when you engage a gate
   at a low hint level, down when you skip or lean on full solutions. With
@@ -90,8 +91,9 @@ ship a compiled fallback.)
 ```yaml
 hone:
   enabled: true
-  learning_budget: 20          # % of eligible (learning) tasks that get coached
-  hint_level: 1                # 0–5, see table above
+  learning_budget: 100         # % of eligible (learning) tasks that get coached
+  hint_level: 0                # 0–5, see table above
+  reflection: on               # once-per-session recap after coached work
   review_only: true            # never rewrites your code unrequested
   autofeedback: true           # senior-lens review of code written during coached tasks
   adaptive: true               # bias coaching by your skill profile (no-op until it learns)
@@ -101,9 +103,11 @@ hone:
     never_coach: []
 ```
 
-The budget is enforced exactly and deterministically: coached/eligible never
-exceeds `learning_budget`%, and at 20% the 5th, 10th, 15th… eligible learning
-task is the one that gets coached. Predictable, not random.
+The defaults are deliberately assertive — every learning task is coached,
+questions-only, reflection on — because Hone exists to make you think. If that's
+more friction than you want, dial `learning_budget` down (at 20% exactly the
+5th, 10th, 15th… eligible learning task gets coached — the ratio is enforced
+exactly and deterministically, never randomly) and raise `hint_level`.
 
 ## What gets classified as "learning"?
 

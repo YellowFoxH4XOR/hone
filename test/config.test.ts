@@ -20,11 +20,12 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-test('defaults apply when no config file exists', () => {
+test('defaults apply when no config file exists (assertive: 100% budget, hint 0, reflection on)', () => {
   const cfg = configLib.loadConfig({});
   assert.strictEqual(cfg.hone.enabled, true);
-  assert.strictEqual(cfg.hone.learning_budget, 20);
-  assert.strictEqual(cfg.hone.hint_level, 1);
+  assert.strictEqual(cfg.hone.learning_budget, 100);
+  assert.strictEqual(cfg.hone.hint_level, 0);
+  assert.strictEqual(cfg.hone.reflection, 'on');
   assert.deepStrictEqual(cfg.__errors, []);
 });
 
@@ -32,7 +33,7 @@ test('user config.yaml overrides defaults, unspecified keys keep defaults', () =
   fs.writeFileSync(path.join(tmpDir, 'config.yaml'), 'hone:\n  learning_budget: 50\n');
   const cfg = configLib.loadConfig({});
   assert.strictEqual(cfg.hone.learning_budget, 50);
-  assert.strictEqual(cfg.hone.hint_level, 1); // untouched default
+  assert.strictEqual(cfg.hone.hint_level, 0); // untouched default
   assert.ok(Array.isArray(cfg.hone.categories.never_coach));
 });
 
@@ -61,7 +62,7 @@ test('regression: a null section (all children commented out) keeps defaults ins
 test('malformed config records an error and falls back to defaults', () => {
   fs.writeFileSync(path.join(tmpDir, 'config.yaml'), 'hone:\n      bad: indent\n  worse: [unclosed\n');
   const cfg = configLib.loadConfig({});
-  assert.strictEqual(cfg.hone.learning_budget, 20);
+  assert.strictEqual(cfg.hone.learning_budget, 100);
   assert.strictEqual(cfg.__errors?.length, 1);
 });
 
@@ -72,13 +73,13 @@ test('runtime state overrides config; clamping applies', () => {
   assert.strictEqual(eff.hone.hint_level, 5);
   const eff2 = configLib.effective(base, {});
   assert.strictEqual(eff2.hone.enabled, true);
-  assert.strictEqual(eff2.hone.hint_level, 1);
+  assert.strictEqual(eff2.hone.hint_level, 0);
 });
 
 test('ensureDefaultConfigFile writes once and the result round-trips', () => {
   assert.strictEqual(configLib.ensureDefaultConfigFile(), true);
   assert.strictEqual(configLib.ensureDefaultConfigFile(), false); // second call no-op
   const cfg = configLib.loadConfig({});
-  assert.strictEqual(cfg.hone.learning_budget, 20);
+  assert.strictEqual(cfg.hone.learning_budget, 100);
   assert.deepStrictEqual(cfg.__errors, []);
 });

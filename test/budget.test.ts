@@ -33,7 +33,7 @@ function config(overrides: Record<string, unknown> = {}): HoneConfig {
 
 test('budget enforcement is exact: coached/eligible never exceeds the budget', () => {
   const profile = freshProfile();
-  const cfg = config({ categories: { always_coach: [], never_coach: [] } });
+  const cfg = config({ learning_budget: 20, categories: { always_coach: [], never_coach: [] } });
   for (let i = 0; i < 1000; i++) {
     decide({ classification: learningTask(), config: cfg, profile });
     const { coached, eligible } = profile.counters;
@@ -65,7 +65,7 @@ test('regression: no float under-coaching at exact boundaries (0.35*180 === 62.9
 
 test('at 20%, coaching fires on the 5th, 10th, 15th eligible request', () => {
   const profile = freshProfile();
-  const cfg = config({ categories: { always_coach: [], never_coach: [] } });
+  const cfg = config({ learning_budget: 20, categories: { always_coach: [], never_coach: [] } });
   const fired: number[] = [];
   for (let i = 1; i <= 15; i++) {
     const result = decide({ classification: learningTask(), config: cfg, profile });
@@ -88,7 +88,7 @@ test('execution tasks are never eligible and never mutate counters', () => {
 
 test('always_coach categories bypass the ratio but still count against it', () => {
   const profile = freshProfile();
-  const cfg = config(); // defaults pin architecture/concurrency/distributed/security
+  const cfg = config({ learning_budget: 20 }); // default categories pin architecture/concurrency/distributed/security
   const first = decide({ classification: learningTask('concurrency'), config: cfg, profile });
   assert.strictEqual(first.coach, true, 'pinned category coaches even on the 1st eligible request');
   assert.strictEqual(profile.counters.coached, 1);
@@ -118,7 +118,7 @@ test('F7 adaptive off leaves the budget strictly deterministic even for weak are
   profile.skills['debugging'] = {
     proficiency: 5, reps: 5, independent_reps: 0, assisted_reps: 5, last_updated: null,
   };
-  const cfg = config({ adaptive: false, categories: { always_coach: [], never_coach: [] } });
+  const cfg = config({ learning_budget: 20, adaptive: false, categories: { always_coach: [], never_coach: [] } });
   const fired: number[] = [];
   for (let i = 1; i <= 15; i++) {
     if (decide({ classification: learningTask('debugging'), config: cfg, profile }).coach) fired.push(i);
@@ -165,9 +165,9 @@ test('budget 0 never coaches unpinned; budget 100 always coaches', () => {
   }
 });
 
-test('malformed budget values fall back to 20 and clamp to [0,100]', () => {
-  assert.strictEqual(normalizeBudget('nonsense'), 20);
-  assert.strictEqual(normalizeBudget(undefined), 20);
+test('malformed budget values fall back to the shipped default (100) and clamp to [0,100]', () => {
+  assert.strictEqual(normalizeBudget('nonsense'), 100);
+  assert.strictEqual(normalizeBudget(undefined), 100);
   assert.strictEqual(normalizeBudget(-5), 0);
   assert.strictEqual(normalizeBudget(250), 100);
   assert.strictEqual(normalizeBudget('35'), 35);
@@ -175,7 +175,7 @@ test('malformed budget values fall back to 20 and clamp to [0,100]', () => {
 
 test('per-category stats accumulate on the profile', () => {
   const profile = freshProfile();
-  const cfg = config({ categories: { always_coach: [], never_coach: [] } });
+  const cfg = config({ learning_budget: 20, categories: { always_coach: [], never_coach: [] } });
   for (let i = 0; i < 10; i++) decide({ classification: learningTask('debugging'), config: cfg, profile });
   assert.strictEqual(profile.categories['debugging']?.eligible, 10);
   assert.strictEqual(profile.categories['debugging']?.coached, 2);
@@ -187,7 +187,7 @@ test('corrupt profile counters self-heal instead of throwing', () => {
     counters: { eligible: 'NaN-ish', coached: null },
     categories: { debugging: { eligible: 'x' } },
   } as unknown as Profile;
-  const cfg = config({ categories: { always_coach: [], never_coach: [] } });
+  const cfg = config({ learning_budget: 20, categories: { always_coach: [], never_coach: [] } });
   assert.doesNotThrow(() => decide({ classification: learningTask(), config: cfg, profile }));
   assert.strictEqual(profile.counters.eligible, 1);
 });
