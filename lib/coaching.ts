@@ -37,17 +37,25 @@ export function hintRule(level: number): HintRule {
 
 // Injected when the Solution Gate opens: Claude must elicit the user's
 // approach before any implementation.
+//
+// Framing is autonomy-supportive on purpose: a hard gate is need-thwarting
+// (Bartholomew et al. 2011), so the copy leads with a RATIONALE, acknowledges
+// the friction, and treats /hone:skip as a genuine choice rather than a
+// grudging escape hatch. Deci, Eghrari, Patrick & Leone (1994) found exactly
+// that combination — rationale + acknowledgement + choice-framing — is what
+// makes an imposed task get internalized instead of resented.
 export function gateContext(opts: { category: string; hintLevel: number }): string {
   const hint = hintRule(opts.hintLevel);
   return [
     '<hone-coaching>',
     `Hone: this request is a coached learning task (category: ${opts.category}). The Solution Gate is ACTIVE.`,
     'For THIS reply only:',
-    '1. Do not write, edit, or generate any code, pseudocode, or file changes — file-editing tools are blocked until the user responds.',
-    '2. Ask the user for their proposed approach first: at most 3 short, targeted questions probing the decisions that actually matter for this task (invariants, failure modes, tradeoffs). Fewer is better.',
-    '3. Tone: a sharp senior peer thinking alongside them — not a quiz or a lecture. One short sentence of setup at most.',
-    `4. After they answer, you will coach at hint level ${opts.hintLevel} (${hint.name}).`,
-    'If the user would rather skip coaching for this task, they can run /hone:skip; if Hone misclassified this (it is not really a learning task), /hone:wrong records it and unblocks. Mention these once, briefly, at the end.',
+    '1. Lead with one plain sentence on why the pause is worth it: putting your own approach into words first is what keeps the skill yours — a deliberate ~30-second trade, not a hoop to clear.',
+    '2. Do not write, edit, or generate any code, pseudocode, or file changes yet — file-editing tools are blocked until the user responds.',
+    '3. Ask for their proposed approach: at most 3 short, targeted questions probing the decisions that actually matter for this task (invariants, failure modes, tradeoffs). Fewer is better.',
+    '4. Tone: a sharp senior peer thinking alongside them — never a quiz, a lecture, or a scold, and never imply they are cutting corners.',
+    `5. After they answer, you will coach at hint level ${opts.hintLevel} (${hint.name}).`,
+    'Genuinely their call: if they would rather just get the code this time, /hone:skip is a first-class option and not a failure; if Hone misclassified this (it is not really a learning task), /hone:wrong records it and unblocks. Offer both plainly, not as a grudging afterthought.',
     '</hone-coaching>',
   ].join('\n');
 }
@@ -80,7 +88,8 @@ export function coachingContext(opts: {
     `Hone: the user just responded to the Solution Gate for a coached ${opts.category} task. Gate is now open.`,
     `Hint level ${opts.hintLevel} (${hint.name}): ${hint.rule}`,
     'Coach like a senior peer reviewing their thinking:',
-    '- Briefly assess their approach: what is sound, what is risky, what they have not considered (edge cases, failure modes, concurrency, cost).',
+    '- FIRST, give a plain verdict on their approach: is it right, partially right, or heading wrong? Name what is genuinely sound before anything else. Lead with this consolidation — a critique that never says whether they were right just reads as more withholding, and the struggle only pays off once it is resolved.',
+    '- THEN: what is risky or what they have not considered (edge cases, failure modes, concurrency, cost).',
     '- At most 3 Socratic questions per turn, and only where a question sharpens their thinking more than a statement would.',
   ];
   if (opts.reviewOnly !== false) {
@@ -99,8 +108,8 @@ export function gateDenyReason(session: { category?: string | null } | null | un
   const category = session?.category || 'learning';
   return (
     `Hone Solution Gate: this is a coached ${category} task and the user has not shared their approach yet. ` +
-    'Do not modify files. Instead, ask the user (max 3 short questions) how they would approach it, then wait. ' +
-    "The user can bypass with /hone:skip — skipping is the USER's decision only; never invoke it or run hone-ctl yourself."
+    'Rather than edit files, ask the user (max 3 short questions) how they would approach it, then wait — putting their own approach into words first is the point of the pause, not a formality. ' +
+    "If they would rather just get the code this time, /hone:skip is theirs to run and a first-class choice — skipping is the USER's decision only; never invoke it or run hone-ctl yourself."
   );
 }
 
@@ -110,8 +119,8 @@ export function autoFeedbackContext(opts: { category: string; reviewOnly: boolea
   const lines = [
     '<hone-coaching>',
     `Hone: code was just written during a coached ${opts.category} task. Before moving on, give the user a brief senior-lens review so they learn what to look for:`,
-    '- 2-4 lines, not a rewrite: name the edge cases, failure modes, or assumptions worth a second look here specifically.',
-    '- Frame it as "here is what I would check", not "here is what is wrong".',
+    '- OPEN with a plain one-line verdict: does this look correct as written, correct-but-watch-X, or likely wrong because Y? Say it directly — a review that never lands a verdict leaves the struggle unresolved (Kapur\'s "unproductive failure"), no better than being handed the answer.',
+    '- Then 2-4 lines, not a rewrite: name the edge cases, failure modes, or assumptions worth a second look here specifically. For those specifics, frame as "here is what I would check", not a verdict on each.',
     '- End with one question that makes them pressure-test the code themselves.',
   ];
   if (opts.reviewOnly) {

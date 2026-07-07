@@ -5,6 +5,25 @@ All notable changes to Hone are documented here. This project follows
 
 ## [Unreleased]
 
+### Changed
+- **Autonomy-supportive Solution Gate copy.** A hard PreToolUse deny is
+  need-thwarting, not merely unsupportive (Bartholomew et al. 2011), so the
+  gate and deny-reason copy now lead with a *rationale* ("putting your own
+  approach into words first is what keeps the skill yours"), drop the scolding
+  tone, and present `/hone:skip` as a first-class choice rather than a grudging
+  afterthought. Deci, Eghrari, Patrick & Leone (1994) found that pairing an
+  imposed task with a rationale, an acknowledgement of the friction, and
+  choice-framed language is what makes it get internalized instead of resented.
+  Behavior is unchanged — same gate, same ≤3 questions; only the framing moved.
+- **Coaching now consolidates before it critiques.** Productive failure only
+  pays off when the struggle is *resolved* with explicit consolidation; without
+  it, withholding is indistinguishable from spoon-feeding (Kapur's
+  "unproductive failure"; Sinha & Kapur 2021, *Review of Educational Research*,
+  d = 0.36). Both the post-gate coaching prompt and the auto-feedback review now
+  require a plain up-front verdict — *right / partially right / wrong*, naming
+  what is genuinely sound — before any critique. `skills/socratic-review`
+  rule 3 gets the same requirement.
+
 ### Fixed
 - **`/hone:off` → `/hone:on` stale-gate hijack.** `setEnabled()` only ever
   wrote `state.json`; it never touched session state, so a Solution Gate left
