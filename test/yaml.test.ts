@@ -40,7 +40,8 @@ hone:
 test('parses the shipped default config template', () => {
   const parsed = parseMap(DEFAULT_CONFIG_YAML);
   assert.strictEqual(parsed.hone.enabled, true);
-  assert.strictEqual(parsed.hone.learning_budget, 20);
+  assert.strictEqual(parsed.hone.learning_budget, 100);
+  assert.strictEqual(parsed.hone.reflection, 'on');
   assert.ok(Array.isArray(parsed.hone.categories.never_coach));
 });
 

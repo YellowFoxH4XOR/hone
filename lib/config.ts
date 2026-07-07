@@ -9,11 +9,11 @@ import type { HoneConfig, RuntimeState, YamlMap } from './types.ts';
 export const DEFAULTS: HoneConfig = {
   hone: {
     enabled: true,
-    learning_budget: 20,
-    hint_level: 1,
+    learning_budget: 100,
+    hint_level: 0,
     review_only: true,
     allow_full_solution: true,
-    reflection: 'optional', // off | optional | on  (F6)
+    reflection: 'on', // off | optional | on  (F6)
     autofeedback: true, // F5: review code written during coached tasks
     adaptive: true, // F7: bias coaching by per-category proficiency (no-op at neutral)
     categories: {
@@ -82,7 +82,7 @@ export function effective(config: HoneConfig, runtime: RuntimeState = {}): HoneC
 }
 
 export function clampHint(n: unknown): number {
-  if (!Number.isInteger(n)) return 1;
+  if (!Number.isInteger(n)) return 0; // fall back to the shipped default
   return Math.min(5, Math.max(0, n as number));
 }
 
@@ -102,11 +102,11 @@ export const DEFAULT_CONFIG_YAML = `# Hone configuration
 
 hone:
   enabled: true
-  learning_budget: 20          # % of eligible (learning) requests that get coached
-  hint_level: 1                # 0 questions-only ... 5 full implementation (vanilla)
+  learning_budget: 100         # % of eligible (learning) requests that get coached (every one)
+  hint_level: 0                # 0 questions-only ... 5 full implementation (vanilla)
   review_only: true            # never rewrite your code unless you ask
   allow_full_solution: true    # reserved (Stage 1); /hone:skip is always available
-  reflection: optional         # off | optional | on — a once-per-session recap after coached work
+  reflection: on               # off | optional | on — a once-per-session recap after coached work (mandatory)
   autofeedback: true           # review code written during a coached task (senior-lens, no rewrite)
   adaptive: true               # bias coaching by your per-category skill profile (no-op until it learns)
   categories:

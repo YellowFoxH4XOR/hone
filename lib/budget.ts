@@ -49,7 +49,7 @@ export function decide(args: {
     return verdict(false, 'never-coach-category', classification);
   }
 
-  const hintLevel = Number.isInteger(hone.hint_level) ? (hone.hint_level as number) : 1;
+  const hintLevel = Number.isInteger(hone.hint_level) ? (hone.hint_level as number) : 0;
   if (hintLevel >= 5) {
     return verdict(false, 'hint-level-5-vanilla', classification);
   }
@@ -102,7 +102,7 @@ function verdict(coach: boolean, reason: BudgetReason, classification: Classific
 
 export function normalizeBudget(value: unknown): number {
   const n = Number(value);
-  if (!Number.isFinite(n)) return 20;
+  if (!Number.isFinite(n)) return 100; // fall back to the shipped default
   return Math.min(100, Math.max(0, n));
 }
 
