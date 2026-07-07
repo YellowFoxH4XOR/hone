@@ -151,11 +151,16 @@ prompt against signal families: diagnostic language ("only fails in CI",
 and distributed-systems reasoning, security questions, performance
 investigation, algorithmic work, and concept-understanding questions.
 
-Design bias: **execution wins every tie.** On our labeled test sets (in-repo,
-including an independently generated adversarial set), execution→coaching
-misclassification — the annoying direction — is under 2%; the PRD requirement
-is <5%. If Hone ever coaches you on a task that didn't deserve it, that's a
-bug: open an issue with the prompt.
+Design bias: **execution wins every tie** — including a *closing-clause
+override*, so a question that ends in an explicit instruction ("why does this
+deadlock? just add a timeout for now") routes to execution: you already decided,
+no gate. The tuned in-repo datasets were adjusted during development, so the
+number that actually means something is the **held-out set** — fresh prompts
+written after the signal lists were frozen and never used to tune them. On it,
+execution→coaching misclassification (the annoying direction) is **0%** and
+learning recall is ~92%; the PRD requirement is <5% false-coach. If Hone ever
+coaches you on a task that didn't deserve it, that's a bug: open an issue with
+the prompt.
 
 ## Privacy
 
