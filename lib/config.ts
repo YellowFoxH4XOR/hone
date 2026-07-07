@@ -16,6 +16,7 @@ export const DEFAULTS: HoneConfig = {
     reflection: 'on', // off | optional | on  (F6)
     autofeedback: true, // F5: review code written during coached tasks
     adaptive: true, // F7: bias coaching by per-category proficiency (no-op at neutral)
+    progressive: true, // F9: graduated categories (85+ over 8+ reps) stop gating
     categories: {
       always_coach: ['architecture', 'concurrency', 'distributed_systems', 'security'],
       // Execution-type tasks (tests, boilerplate, crud, ...) are never coached
@@ -109,6 +110,7 @@ hone:
   reflection: on               # off | optional | on — a once-per-session recap after coached work (mandatory)
   autofeedback: true           # review code written during a coached task (senior-lens, no rewrite)
   adaptive: true               # bias coaching by your per-category skill profile (no-op until it learns)
+  progressive: true            # categories you master (85+ proficiency, 8+ reps) stop gating
   categories:
     # always_coach bypasses the budget. never_coach mutes LEARNING categories
     # (e.g. [performance, new_framework]) — execution tasks (tests, boilerplate,

@@ -6,7 +6,11 @@ import {
   adaptiveAdjustment,
   effectiveHint,
   ensureSkill,
+  decayedProficiency,
+  graduated,
   BASELINE,
+  GRADUATE_PROFICIENCY,
+  GRADUATE_REPS,
 } from '../lib/skills.ts';
 import type { Profile } from '../lib/types.ts';
 
@@ -24,6 +28,48 @@ function freshProfile(): Profile {
 test('an unseen category sits at the neutral baseline', () => {
   const p = freshProfile();
   assert.strictEqual(proficiencyOf(p, 'concurrency'), BASELINE);
+});
+
+test('F9: graduation requires BOTH high proficiency and enough reps', () => {
+  const p = freshProfile();
+  p.skills['security'] = {
+    proficiency: 95, reps: GRADUATE_REPS - 1, independent_reps: 7, assisted_reps: 0, last_updated: null,
+  };
+  assert.strictEqual(graduated(p, 'security'), false, 'too few reps');
+  p.skills['debugging'] = {
+    proficiency: GRADUATE_PROFICIENCY - 1, reps: 20, independent_reps: 15, assisted_reps: 5, last_updated: null,
+  };
+  assert.strictEqual(graduated(p, 'debugging'), false, 'below the proficiency bar');
+  p.skills['algorithms'] = {
+    proficiency: 90, reps: 10, independent_reps: 9, assisted_reps: 1, last_updated: null,
+  };
+  assert.strictEqual(graduated(p, 'algorithms'), true);
+  assert.strictEqual(graduated(p, 'concurrency'), false, 'unseen category never graduates');
+});
+
+test('F9: proficiency decays toward baseline with disuse, capped, and reverses graduation', () => {
+  const p = freshProfile();
+  const tenWeeksAgo = new Date(Date.now() - 10 * 7 * 24 * 3600 * 1000).toISOString();
+  p.skills['algorithms'] = {
+    proficiency: 90, reps: 10, independent_reps: 9, assisted_reps: 1, last_updated: tenWeeksAgo,
+  };
+  assert.strictEqual(decayedProficiency(p, 'algorithms'), 80); // -1/idle week
+  assert.strictEqual(graduated(p, 'algorithms'), false, 'stale mastery re-enters coaching');
+
+  // Decay is capped: even a year idle never wipes the signal.
+  const yearAgo = new Date(Date.now() - 52 * 7 * 24 * 3600 * 1000).toISOString();
+  p.skills['algorithms']!.last_updated = yearAgo;
+  assert.strictEqual(decayedProficiency(p, 'algorithms'), 90 - 15);
+
+  // Drifts toward baseline from below too, never crossing it.
+  p.skills['weakness'] = {
+    proficiency: 44, reps: 3, independent_reps: 0, assisted_reps: 3, last_updated: yearAgo,
+  };
+  assert.strictEqual(decayedProficiency(p, 'weakness'), BASELINE);
+
+  // Fresh activity -> no decay.
+  p.skills['algorithms']!.last_updated = new Date().toISOString();
+  assert.strictEqual(decayedProficiency(p, 'algorithms'), 90);
 });
 
 test('independent reps raise proficiency; assisted reps lower it', () => {

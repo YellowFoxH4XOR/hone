@@ -57,21 +57,26 @@ run(async (input) => {
   if (!config.hone.enabled) return;
 
   const session = state.loadSession(input.session_id);
-  if (!gate.isBlocking(session)) return;
+  const interviewing = session.interview_mode === true;
+  if (!gate.isBlocking(session) && !interviewing) return;
+
+  const reason = interviewing
+    ? 'Hone interview mode: no code is written during an interview — keep questioning. The user can end it with /hone:interview stop.'
+    : coaching.gateDenyReason(session);
 
   const tool = String(input.tool_name ?? '');
 
   if (FILE_WRITING_TOOLS.has(tool)) {
-    deny(coaching.gateDenyReason(session));
+    deny(reason);
     return;
   }
 
   if (tool === 'Bash') {
     const command = String(input.tool_input?.command ?? '');
-    // The /hone:skip escape hatch must always work while the gate is closed.
+    // The /hone:skip and /hone:interview escape hatches must always work.
     if (command.includes('hone-ctl')) return;
     if (hasFileRedirect(command) || BASH_WRITE_PATTERNS.some((re) => re.test(command))) {
-      deny(coaching.gateDenyReason(session));
+      deny(reason);
     }
   }
 });

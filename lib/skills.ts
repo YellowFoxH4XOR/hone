@@ -29,6 +29,15 @@ const STEP = 6; // proficiency nudge per outcome (≈8 reps to cross a band)
 const WEAK = 40; // below this: bias toward coaching, more Socratic
 const STRONG = 70; // above this: back off, more direct
 
+// F9: graduation — a category this strong, over this many reps, has earned
+// independence and stops gating entirely.
+export const GRADUATE_PROFICIENCY = 85;
+export const GRADUATE_REPS = 8;
+// Unused skills decay toward baseline (1 point per idle week, capped) so
+// graduation is reversible rather than a permanent badge.
+const DECAY_PER_WEEK = 1;
+const DECAY_CAP = 15;
+
 // Hint level at or below which answering the gate counts as "independent".
 export const INDEPENDENT_HINT_CEILING = 2;
 
@@ -50,6 +59,30 @@ export function ensureSkill(profile: Profile, category: string): SkillStats {
 export function proficiencyOf(profile: Profile, category: string): number {
   const s = profile.skills?.[category];
   return s && Number.isFinite(s.proficiency) ? s.proficiency : BASELINE;
+}
+
+// F9: proficiency as-read — raw score drifted toward baseline by idle time.
+// A category untouched for months slides back toward neutral, so a graduated
+// category eventually re-enters coaching if it goes stale.
+export function decayedProficiency(profile: Profile, category: string, now = new Date()): number {
+  const raw = proficiencyOf(profile, category);
+  const s = profile.skills?.[category];
+  if (!s?.last_updated) return raw;
+  const then = Date.parse(s.last_updated);
+  if (!Number.isFinite(then)) return raw;
+  const idleWeeks = Math.max(0, (now.getTime() - then) / (7 * 24 * 3600 * 1000));
+  const decay = Math.min(DECAY_CAP, Math.floor(idleWeeks) * DECAY_PER_WEEK);
+  if (decay === 0) return raw;
+  // Drift toward baseline from either side, never past it.
+  return raw > BASELINE ? Math.max(BASELINE, raw - decay) : Math.min(BASELINE, raw + decay);
+}
+
+// F9: has this category earned independence? Uses decayed proficiency so the
+// answer degrades naturally with disuse.
+export function graduated(profile: Profile, category: string, now = new Date()): boolean {
+  const s = profile.skills?.[category];
+  if (!s || !Number.isInteger(s.reps) || s.reps < GRADUATE_REPS) return false;
+  return decayedProficiency(profile, category, now) >= GRADUATE_PROFICIENCY;
 }
 
 function clamp(n: number, lo: number, hi: number): number {

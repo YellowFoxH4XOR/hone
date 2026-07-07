@@ -126,6 +126,23 @@ test('F7 adaptive off leaves the budget strictly deterministic even for weak are
   assert.deepStrictEqual(fired, [5, 10, 15]); // identical to the non-adaptive schedule
 });
 
+test('F9: a graduated category is eligible but not coached; progressive:false restores gating', () => {
+  const profile = freshProfile();
+  profile.skills['debugging'] = {
+    proficiency: 92, reps: 12, independent_reps: 10, assisted_reps: 2,
+    last_updated: new Date().toISOString(),
+  };
+  const cfg = config({ learning_budget: 100, categories: { always_coach: [], never_coach: [] } });
+  const grad = decide({ classification: learningTask('debugging'), config: cfg, profile });
+  assert.strictEqual(grad.coach, false);
+  assert.strictEqual(grad.reason, 'graduated-independent');
+  assert.strictEqual(profile.counters.eligible, 1, 'still counted eligible — stats stay honest');
+
+  const cfgOff = config({ learning_budget: 100, progressive: false, categories: { always_coach: [], never_coach: [] } });
+  const gated = decide({ classification: learningTask('debugging'), config: cfgOff, profile });
+  assert.strictEqual(gated.coach, true, 'progressive:false keeps coaching mastered areas');
+});
+
 test('never_coach categories are excluded before counters', () => {
   const profile = freshProfile();
   const cfg = config({ categories: { always_coach: [], never_coach: ['performance'] } });

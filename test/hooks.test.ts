@@ -274,6 +274,116 @@ test('malformed stdin and corrupt state fail open (exit 0, no output)', () => {
   );
 });
 
+test('/hone:wrong on a wrongly-gated task: logs it, unblocks, no proficiency penalty', () => {
+  runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
+  runHook('user-prompt-submit.ts', {
+    session_id: SESSION, cwd: tmpDir,
+    prompt: 'we keep hitting a deadlock between the payment and refund workers',
+  });
+  assert.strictEqual(sessionFile().gate, 'pending');
+
+  const out = runCtl(['wrong', 'this was just a copy-paste task']);
+  assert.ok(out.includes('misclassified'));
+  assert.ok(out.includes('unblocked'));
+  assert.strictEqual(sessionFile().gate, 'skipped');
+
+  // Logged to the local labeled set, with the user's note.
+  const log = fs.readFileSync(path.join(tmpDir, 'misclassifications.jsonl'), 'utf8').trim().split('\n');
+  assert.strictEqual(log.length, 1);
+  const rec = JSON.parse(log[0]!);
+  assert.strictEqual(rec.classified_as, 'learning');
+  assert.strictEqual(rec.reported_correct_intent, 'execution');
+  assert.strictEqual(rec.note, 'this was just a copy-paste task');
+
+  const profile = profileFile();
+  assert.strictEqual(profile.counters.corrections, 1);
+  assert.strictEqual(profile.counters.skipped ?? 0, 0, 'a correction is not a skip');
+  // Crucially: no assisted rep — Hone's mistake must not cost proficiency.
+  assert.strictEqual(profile.skills['concurrency']?.assisted_reps ?? 0, 0);
+});
+
+test('/hone:wrong also captures the missed-learning direction (execution passthrough)', () => {
+  runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
+  runHook('user-prompt-submit.ts', {
+    session_id: SESSION, cwd: tmpDir,
+    prompt: 'add a logout button to the navbar component',
+  });
+  const out = runCtl(['wrong']);
+  assert.ok(out.includes('misclassified'));
+  const rec = JSON.parse(fs.readFileSync(path.join(tmpDir, 'misclassifications.jsonl'), 'utf8').trim());
+  assert.strictEqual(rec.classified_as, 'execution');
+  assert.strictEqual(rec.reported_correct_intent, 'learning');
+});
+
+test('F10 interview mode: interviewer context on every prompt, writes blocked, stop restores', () => {
+  runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
+  const start = runCtl(['interview', 'distributed', 'systems']);
+  assert.ok(start.includes('Interview mode ON'));
+  assert.ok(start.includes('distributed systems'));
+
+  // Any prompt — even a plain execution one — gets interviewer framing.
+  const during = runHook('user-prompt-submit.ts', {
+    session_id: SESSION, cwd: tmpDir, prompt: 'add a logout button to the navbar component',
+  });
+  assert.ok(during.hookSpecificOutput.additionalContext.includes('INTERVIEW MODE'));
+  assert.ok(during.hookSpecificOutput.additionalContext.includes('distributed systems'));
+
+  // File edits are blocked while interviewing.
+  const denied = runHook('pre-tool-use.ts', {
+    session_id: SESSION, cwd: tmpDir, tool_name: 'Write', tool_input: { file_path: '/x.ts' },
+  });
+  assert.strictEqual(denied.hookSpecificOutput.permissionDecision, 'deny');
+  assert.ok(denied.hookSpecificOutput.permissionDecisionReason.includes('interview'));
+
+  assert.strictEqual(profileFile().counters.interviews, 1);
+
+  const stop = runCtl(['interview', 'stop']);
+  assert.ok(stop.includes('Interview ended'));
+  const after = runHook('pre-tool-use.ts', {
+    session_id: SESSION, cwd: tmpDir, tool_name: 'Write', tool_input: { file_path: '/x.ts' },
+  });
+  assert.strictEqual(after, null, 'writes flow again after the interview');
+});
+
+test('dashboard --serve: localhost-only server exposes profile data and the page', async () => {
+  const { spawn } = await import('node:child_process');
+  runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
+
+  const child = spawn(
+    'node',
+    [path.join(ROOT, 'bin', 'hone-ctl.ts'), 'dashboard', '--serve', '--port', '0'],
+    { env: { ...process.env, HONE_STATE_DIR: tmpDir } },
+  );
+  try {
+    const url: string = await new Promise((resolve, reject) => {
+      let buf = '';
+      const timer = setTimeout(() => reject(new Error(`server never listened; output: ${buf}`)), 8000);
+      child.stdout.on('data', (chunk: Buffer) => {
+        buf += chunk.toString();
+        const line = buf.split('\n').find((l) => l.includes('"listening"'));
+        if (line) {
+          clearTimeout(timer);
+          resolve(JSON.parse(line).url);
+        }
+      });
+    });
+    assert.ok(url.startsWith('http://127.0.0.1:'), 'binds loopback only');
+
+    const data = (await (await fetch(`${url}/data`)).json()) as {
+      hone: { enabled: boolean };
+      skills: unknown[];
+    };
+    assert.strictEqual(data.hone.enabled, true);
+    assert.ok(Array.isArray(data.skills));
+
+    const page = await (await fetch(url)).text();
+    assert.ok(page.includes('Hone'));
+    assert.ok(page.includes('directional'));
+  } finally {
+    child.kill();
+  }
+});
+
 test('PRD acceptance: added latency per prompt stays under 500ms', () => {
   runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
   const input = {

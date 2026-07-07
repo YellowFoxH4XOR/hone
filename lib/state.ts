@@ -112,6 +112,19 @@ export function saveSession(sessionId: unknown, session: SessionState): void {
   saveJson(sessionPath(sessionId), session);
 }
 
+// ---- misclassification log (/hone:wrong) -------------------------------------
+// Append-only JSONL: the user's real-world labeled set. Grows into classifier
+// tuning data — the honest replacement for synthetic validation rounds.
+
+export function misclassificationsPath(): string {
+  return path.join(honeDir(), 'misclassifications.jsonl');
+}
+
+export function appendMisclassification(record: Record<string, unknown>): void {
+  ensureDirs();
+  fs.appendFileSync(misclassificationsPath(), JSON.stringify(record) + '\n');
+}
+
 // Pointer file so `hone-ctl` (run from a slash command, which doesn't know its
 // own session id) can act on "the session the user is currently in".
 export function touchCurrentSession(sessionId: unknown): void {
