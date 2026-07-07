@@ -1,0 +1,19 @@
+{
+  "name": "hone-claude-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Hone — a Claude Code plugin that makes developers better engineers, not just faster ones. Intent routing, learning budget, solution gate, hint levels, Socratic reviews.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
+  },
+  "license": "MIT"
+}
