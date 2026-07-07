@@ -111,12 +111,83 @@ test('full coached-task lifecycle through the real hooks', () => {
   });
   assert.strictEqual(allowAfter, null);
 
-  // 6. Profile recorded the interaction.
+  // 6. Profile recorded the interaction — including the F7 skill signal
+  //    (gate answered at default hint 1 <= 2 => independent).
   const profile = profileFile();
   assert.strictEqual(profile.counters.eligible, 1);
   assert.strictEqual(profile.counters.coached, 1);
   assert.strictEqual(profile.counters.gates_answered, 1);
   assert.strictEqual(profile.categories['concurrency']?.coached, 1);
+  assert.strictEqual(profile.skills['concurrency']?.independent_reps, 1);
+  assert.ok(profile.skills['concurrency']!.proficiency > 50, 'independent rep raised proficiency');
+});
+
+test('F5 auto-feedback fires once per coached task after code is written', () => {
+  runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
+  runHook('user-prompt-submit.ts', {
+    session_id: SESSION, cwd: tmpDir,
+    prompt: 'we keep hitting a race condition when two workers claim the same job',
+  });
+  // No feedback before the gate is answered.
+  const preAnswer = runHook('post-tool-use.ts', {
+    session_id: SESSION, cwd: tmpDir, tool_name: 'Write', tool_input: { file_path: '/x.ts' },
+  });
+  assert.strictEqual(preAnswer, null, 'no auto-feedback while the gate is still pending');
+
+  runHook('user-prompt-submit.ts', {
+    session_id: SESSION, cwd: tmpDir,
+    prompt: 'row-level locking with SELECT FOR UPDATE SKIP LOCKED',
+  });
+  // First write after answering -> feedback.
+  const first = runHook('post-tool-use.ts', {
+    session_id: SESSION, cwd: tmpDir, tool_name: 'Write', tool_input: { file_path: '/worker.ts' },
+  });
+  assert.ok(first.hookSpecificOutput.additionalContext.includes('senior-lens review'));
+  // Second write in the same task -> silent (once per task).
+  const second = runHook('post-tool-use.ts', {
+    session_id: SESSION, cwd: tmpDir, tool_name: 'Edit', tool_input: { file_path: '/worker.ts' },
+  });
+  assert.strictEqual(second, null, 'auto-feedback is once per coached task');
+});
+
+test('F6 reflection fires once per coached session via a Stop block', () => {
+  runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
+  runHook('user-prompt-submit.ts', {
+    session_id: SESSION, cwd: tmpDir,
+    prompt: 'we keep hitting a race condition when two workers claim the same job',
+  });
+  runHook('user-prompt-submit.ts', {
+    session_id: SESSION, cwd: tmpDir, prompt: 'row-level locking, i think',
+  });
+  // Gate is 'answered' -> Stop blocks to ask for reflection.
+  const first = runHook('stop.ts', { session_id: SESSION, cwd: tmpDir });
+  assert.strictEqual(first.decision, 'block');
+  assert.ok(first.reason.includes('reflection'));
+  assert.strictEqual(profileFile().counters.reflections, 1);
+  // Second stop in the same session -> no repeat.
+  const second = runHook('stop.ts', { session_id: SESSION, cwd: tmpDir });
+  assert.strictEqual(second, null, 'reflection is once per session');
+});
+
+test('F6 reflection never fires for an uncoached session', () => {
+  runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
+  runHook('user-prompt-submit.ts', {
+    session_id: SESSION, cwd: tmpDir, prompt: 'add a logout button to the navbar',
+  });
+  const stop = runHook('stop.ts', { session_id: SESSION, cwd: tmpDir });
+  assert.strictEqual(stop, null, 'no coached work -> no reflection');
+});
+
+test('F7 skipping records an assisted signal that lowers proficiency', () => {
+  runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
+  runHook('user-prompt-submit.ts', {
+    session_id: SESSION, cwd: tmpDir,
+    prompt: 'we keep hitting a deadlock between the payment and refund workers',
+  });
+  runCtl(['skip']);
+  const profile = profileFile();
+  assert.strictEqual(profile.skills['concurrency']?.assisted_reps, 1);
+  assert.ok(profile.skills['concurrency']!.proficiency < 50, 'skip lowered proficiency');
 });
 
 test('the docs-variant user_input field is honored too', () => {

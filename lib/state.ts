@@ -47,10 +47,11 @@ function saveJson(file: string, value: unknown): void {
 
 export function defaultProfile(): Profile {
   return {
-    version: 1,
+    version: 2,
     created_at: new Date().toISOString(),
-    counters: { eligible: 0, coached: 0, skipped: 0, gates_answered: 0 },
+    counters: { eligible: 0, coached: 0, skipped: 0, gates_answered: 0, reflections: 0 },
     categories: {},
+    skills: {},
     hint_history: [],
   };
 }

@@ -18,7 +18,7 @@ run(async (input) => {
   if (!config.hone.enabled) return;
 
   const profile = state.loadProfile();
-  const counters = profile.counters ?? { eligible: 0, coached: 0, skipped: 0, gates_answered: 0 };
+  const counters = profile.counters ?? { eligible: 0, coached: 0, skipped: 0, gates_answered: 0, reflections: 0 };
   let text = coaching.sessionStartContext({
     enabled: true,
     hintLevel: config.hone.hint_level,

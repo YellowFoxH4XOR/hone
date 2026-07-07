@@ -42,6 +42,22 @@ When you hit a **learning-worthy task** — a race condition, an architecture ca
 At hint level 5 Hone doesn't gate at all — every prompt passes through as
 vanilla Claude Code, and nothing counts against the budget.
 
+### Beyond the gate (Stage 1)
+
+- **Auto-feedback** — after code is written during a coached task, Hone gives a
+  short senior-lens review (edge cases, failure modes, one thing to check) so
+  you learn what to look for. It never silently rewrites your code.
+- **Reflection** — once per coached session, Hone invites a quick recap ("what
+  was hardest? explain it back without looking"). Always optional; set
+  `reflection: off` to disable.
+- **Skill profile & adaptive coaching** — Hone keeps a per-category proficiency
+  profile (see `/hone:status`) that moves as you work: up when you engage a gate
+  at a low hint level, down when you skip or lean on full solutions. With
+  `adaptive: true`, your *weak* areas get more Socratic questioning and bypass
+  the budget, while *strong* areas get more direct help. The profile is a
+  **directional behavioral signal — not a graded test score** — and it's a
+  no-op until it has learned enough about you to matter.
+
 Not feeling it today? `/hone:skip` and Claude just writes the code. Always.
 
 ## Install
@@ -77,10 +93,12 @@ hone:
   learning_budget: 20          # % of eligible (learning) tasks that get coached
   hint_level: 1                # 0–5, see table above
   review_only: true            # never rewrites your code unrequested
+  autofeedback: true           # senior-lens review of code written during coached tasks
+  adaptive: true               # bias coaching by your skill profile (no-op until it learns)
   categories:
-    # pinned categories bypass the budget; never_coach is never coached
+    # always_coach bypasses the budget; never_coach mutes a *learning* category
     always_coach: [architecture, concurrency, distributed_systems, security]
-    never_coach: [boilerplate, tests, documentation, react_components, crud]
+    never_coach: []
 ```
 
 The budget is enforced exactly and deterministically: coached/eligible never
