@@ -1,5 +1,7 @@
 # Hone
 
+[![CI](https://github.com/YellowFoxH4XOR/hone/actions/workflows/ci.yml/badge.svg)](https://github.com/YellowFoxH4XOR/hone/actions/workflows/ci.yml)
+
 **Ship fast. Stay sharp.**
 
 Hone is a Claude Code plugin that selectively turns the AI from an *author* into a
