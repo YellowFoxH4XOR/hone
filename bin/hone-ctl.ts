@@ -4,11 +4,15 @@
 // session id, so session-scoped verbs (skip) act on the "current" session
 // pointer, which every UserPromptSubmit hook invocation refreshes.
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { spawn } from 'node:child_process';
 import * as state from '../lib/state.ts';
 import * as configLib from '../lib/config.ts';
 import * as gateLib from '../lib/gate.ts';
 import * as coaching from '../lib/coaching.ts';
 import * as skills from '../lib/skills.ts';
+import { createDashboardServer } from '../lib/dashboard.ts';
 
 function main(argv: string[]): number {
   const [verb, ...args] = argv;
@@ -23,8 +27,14 @@ function main(argv: string[]): number {
       return setHint(args[0]);
     case 'skip':
       return skip(args);
+    case 'wrong':
+      return wrong(args);
+    case 'interview':
+      return interview(args);
+    case 'dashboard':
+      return dashboard(args);
     default:
-      console.log('usage: hone-ctl <status|on|off|hint N|skip>');
+      console.log('usage: hone-ctl <status|on|off|hint N|skip|wrong|interview [topic|stop]|dashboard [stop]>');
       return 1;
   }
 }
@@ -48,8 +58,13 @@ function status(): number {
     `Learning budget: ${hone.learning_budget}% — coached ${counters.coached}/${counters.eligible} eligible learning tasks`,
   );
   lines.push(
-    `Gates answered: ${counters.gates_answered} · skipped: ${counters.skipped} · reflections: ${counters.reflections ?? 0}`,
+    `Gates answered: ${counters.gates_answered} · skipped: ${counters.skipped} · reflections: ${counters.reflections ?? 0}` +
+      ((counters.corrections ?? 0) > 0 ? ` · corrections: ${counters.corrections}` : '') +
+      ((counters.interviews ?? 0) > 0 ? ` · interviews: ${counters.interviews}` : ''),
   );
+  if (session?.interview_mode) {
+    lines.push(`Interview mode: ACTIVE${session.interview_topic ? ` (${session.interview_topic})` : ''} — end with /hone:interview stop`);
+  }
   lines.push(
     `Current session gate: ${gateLib.describe(session)}${session?.category ? ` (${session.category})` : ''}`,
   );
@@ -59,11 +74,13 @@ function status(): number {
   if (skillEntries.length > 0) {
     lines.push('Skill profile (directional — reflects how you engage coaching, not test scores):');
     for (const [name, s] of skillEntries.sort((a, b) => b[1].proficiency - a[1].proficiency)) {
-      const filled = Math.round(skills.proficiencyOf(profile, name) / 10);
+      const shown = skills.decayedProficiency(profile, name);
+      const filled = Math.min(10, Math.max(0, Math.round(shown / 10)));
       const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
-      const band = adaptiveBand(s.proficiency);
+      const grad = skills.graduated(profile, name);
+      const band = grad ? 'graduated 🎓 — no longer gated' : adaptiveBand(shown);
       lines.push(
-        `  ${name.padEnd(20)} ${bar} ${String(Math.round(s.proficiency)).padStart(3)}  (${s.independent_reps} indep / ${s.reps} reps${band ? `, ${band}` : ''})`,
+        `  ${name.padEnd(20)} ${bar} ${String(Math.round(shown)).padStart(3)}  (${s.independent_reps} indep / ${s.reps} reps${band ? `, ${band}` : ''})`,
       );
     }
     if (hone.adaptive !== false) {
@@ -158,4 +175,149 @@ function skip(args: string[]): number {
   return 0;
 }
 
-process.exit(main(process.argv.slice(2)));
+// /hone:wrong — the user says the last classification was wrong. Record it to
+// the local labeled set and, if the mistake is currently gating them, unblock
+// WITHOUT the proficiency penalty a skip would cost.
+function wrong(args: string[]): number {
+  const sessionId = state.currentSessionId();
+  if (!sessionId) {
+    console.log('No active Hone session found.');
+    return 0;
+  }
+  const session = state.loadSession(sessionId);
+  const last = session.last_classification;
+  if (!last) {
+    console.log('No classified prompt recorded yet in this session — nothing to report.');
+    return 0;
+  }
+
+  const note = args.join(' ').trim();
+  state.appendMisclassification({
+    at: new Date().toISOString(),
+    prompt_preview: last.prompt_preview,
+    classified_as: last.intent,
+    category: last.category,
+    coached: last.coached,
+    // What the user implies the truth was: the opposite direction.
+    reported_correct_intent: last.intent === 'learning' ? 'execution' : 'learning',
+    note: note || undefined,
+  });
+
+  const profile = state.loadProfile();
+  if (!profile.counters) {
+    profile.counters = { eligible: 0, coached: 0, skipped: 0, gates_answered: 0, reflections: 0 };
+  }
+  profile.counters.corrections = (profile.counters.corrections || 0) + 1;
+
+  let unblocked = false;
+  if (gateLib.isBlocking(session)) {
+    gateLib.skip(session); // no recordOutcome: a misclassification is not an assist
+    state.saveSession(sessionId, session);
+    unblocked = true;
+  }
+  state.saveProfile(profile);
+
+  console.log(
+    `Recorded as misclassified (was: ${last.intent}/${last.category}) → ${state.misclassificationsPath()}` +
+      (unblocked ? '\nGate unblocked — no proficiency penalty; this one was on Hone.' : ''),
+  );
+  return 0;
+}
+
+// /hone:interview [topic] | stop — F10.
+function interview(args: string[]): number {
+  const sessionId = state.currentSessionId();
+  if (!sessionId) {
+    console.log('No active Hone session found.');
+    return 0;
+  }
+  const session = state.loadSession(sessionId);
+
+  if (args[0] === 'stop') {
+    if (!session.interview_mode) {
+      console.log('No interview in progress.');
+      return 0;
+    }
+    session.interview_mode = false;
+    session.interview_topic = null;
+    state.saveSession(sessionId, session);
+    console.log('Interview ended. Back to normal coaching.');
+    return 0;
+  }
+
+  const topic = args.join(' ').trim() || null;
+  session.interview_mode = true;
+  session.interview_topic = topic;
+  // An interview supersedes any pending gate — clear it without penalty.
+  if (gateLib.isBlocking(session)) gateLib.skip(session);
+  state.saveSession(sessionId, session);
+
+  const profile = state.loadProfile();
+  if (!profile.counters) {
+    profile.counters = { eligible: 0, coached: 0, skipped: 0, gates_answered: 0, reflections: 0 };
+  }
+  profile.counters.interviews = (profile.counters.interviews || 0) + 1;
+  state.saveProfile(profile);
+
+  console.log(
+    `Interview mode ON${topic ? ` (topic: ${topic})` : ''} — Claude interviews you; no code gets written. End with /hone:interview stop.`,
+  );
+  return 0;
+}
+
+// /hone:dashboard [stop] — local skill-profile dashboard on 127.0.0.1.
+function dashboard(args: string[]): number {
+  const pidFile = path.join(state.honeDir(), 'dashboard.pid');
+
+  if (args[0] === 'stop') {
+    try {
+      const pid = parseInt(fs.readFileSync(pidFile, 'utf8'), 10);
+      process.kill(pid);
+      fs.rmSync(pidFile, { force: true });
+      console.log('Dashboard stopped.');
+    } catch {
+      console.log('No dashboard running.');
+    }
+    return 0;
+  }
+
+  const runtime = state.loadRuntimeState();
+  const config = configLib.effective(configLib.loadConfig({ cwd: process.cwd() }), runtime);
+  const portFlag = args.indexOf('--port');
+  const port = portFlag >= 0 ? parseInt(args[portFlag + 1] ?? '', 10) : config.hone.dashboard?.port ?? 4173;
+
+  if (args.includes('--serve')) {
+    // Foreground server (run detached by the default path below).
+    const server = createDashboardServer();
+    server.listen(Number.isInteger(port) ? port : 4173, '127.0.0.1', () => {
+      const addr = server.address();
+      const actual = typeof addr === 'object' && addr ? addr.port : port;
+      state.ensureDirs();
+      fs.writeFileSync(pidFile, String(process.pid));
+      console.log(JSON.stringify({ listening: true, url: `http://127.0.0.1:${actual}` }));
+    });
+    return -1; // keep the process alive
+  }
+
+  // Already running?
+  try {
+    const pid = parseInt(fs.readFileSync(pidFile, 'utf8'), 10);
+    process.kill(pid, 0); // throws if dead
+    console.log(`Dashboard already running: http://127.0.0.1:${port} (stop with /hone:dashboard stop)`);
+    return 0;
+  } catch {
+    /* not running — start it */
+  }
+
+  const child = spawn(process.execPath, [process.argv[1]!, 'dashboard', '--serve', '--port', String(port)], {
+    detached: true,
+    stdio: 'ignore',
+    env: process.env,
+  });
+  child.unref();
+  console.log(`Dashboard started: http://127.0.0.1:${port} (local only; stop with /hone:dashboard stop)`);
+  return 0;
+}
+
+const code = main(process.argv.slice(2));
+if (code >= 0) process.exit(code);

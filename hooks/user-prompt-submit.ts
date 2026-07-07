@@ -45,6 +45,12 @@ run(async (input) => {
   const session = state.loadSession(sessionId);
   const category = session.category || 'learning';
 
+  // F10: interview mode owns every prompt until /hone:interview stop.
+  if (session.interview_mode) {
+    inject(coaching.interviewContext({ topic: session.interview_topic }));
+    return;
+  }
+
   // The user is answering an open Solution Gate.
   if (gate.isBlocking(session)) {
     gate.markAnswered(session);
@@ -86,7 +92,25 @@ run(async (input) => {
 
   // Fresh prompt: route it.
   const classification = classify(prompt);
-  if (classification.passthrough || classification.intent !== 'learning') return;
+
+  // Record the routed classification so /hone:wrong can report it (both
+  // directions: false-coach and missed-learning).
+  const recordLast = (coached: boolean): void => {
+    session.last_classification = {
+      prompt_preview: prompt.slice(0, 140),
+      intent: classification.intent,
+      category: classification.category,
+      coached,
+      at: new Date().toISOString(),
+    };
+  };
+
+  if (classification.passthrough) return;
+  if (classification.intent !== 'learning') {
+    recordLast(false);
+    state.saveSession(sessionId, session);
+    return;
+  }
 
   const profile = state.loadProfile();
   const decision = budget.decide({ classification, config, profile });
@@ -98,11 +122,16 @@ run(async (input) => {
   ) {
     state.saveProfile(profile);
   }
-  if (!decision.coach) return;
+  if (!decision.coach) {
+    recordLast(false);
+    state.saveSession(sessionId, session);
+    return;
+  }
 
   gate.open(session, { category: decision.category, prompt });
   // F5: a fresh coached task — allow one auto-feedback pass again.
   session.feedback_given = false;
+  recordLast(true);
   state.saveSession(sessionId, session);
 
   // F7 adaptive: weak areas get more Socratic questioning up front.

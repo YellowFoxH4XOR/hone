@@ -5,7 +5,7 @@
     "url": "https://github.com/YellowFoxH4XOR"
   },
   "metadata": {
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Hone — a behavioral layer for Claude Code that makes developers better engineers, not just faster ones."
   },
   "plugins": [

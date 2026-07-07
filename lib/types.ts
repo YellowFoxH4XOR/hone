@@ -13,6 +13,16 @@ export interface Classification {
 
 export type GateState = 'idle' | 'pending' | 'answered' | 'skipped';
 
+// The most recent routed (non-passthrough) classification — what /hone:wrong
+// reports on.
+export interface LastClassification {
+  prompt_preview: string;
+  intent: Intent;
+  category: string;
+  coached: boolean;
+  at: string;
+}
+
 export interface SessionState {
   gate: GateState;
   category: string | null;
@@ -26,6 +36,11 @@ export interface SessionState {
   // F6: reflection fires at most once per session (stop_hook_active was
   // removed from the API, so we guard the Stop-hook loop ourselves).
   reflection_done?: boolean;
+  // F10: interview mode — every prompt becomes interviewer-style questioning
+  // and file edits are blocked until `/hone:interview stop`.
+  interview_mode?: boolean;
+  interview_topic?: string | null;
+  last_classification?: LastClassification;
 }
 
 export interface Counters {
@@ -34,6 +49,8 @@ export interface Counters {
   skipped: number;
   gates_answered: number;
   reflections: number;
+  corrections?: number; // /hone:wrong reports
+  interviews?: number; // interview sessions started
 }
 
 export interface CategoryStats {
@@ -84,6 +101,7 @@ export interface HoneSettings {
   reflection: 'off' | 'optional' | 'on';
   autofeedback: boolean; // F5: review code written during coached tasks
   adaptive: boolean; // F7: bias coaching by per-category proficiency
+  progressive: boolean; // F9: graduated categories (85+ proficiency, 8+ reps) stop gating
   categories: {
     always_coach: string[];
     never_coach: string[];
@@ -111,6 +129,7 @@ export type BudgetReason =
   | 'within-budget'
   | 'always-coach-category'
   | 'adaptive-weak-area'
+  | 'graduated-independent'
   | 'over-budget';
 
 export interface BudgetDecision {

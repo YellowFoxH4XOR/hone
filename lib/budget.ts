@@ -23,7 +23,7 @@ import type {
   HoneSettings,
   Profile,
 } from './types.ts';
-import { adaptiveAdjustment } from './skills.ts';
+import { adaptiveAdjustment, graduated } from './skills.ts';
 
 export function decide(args: {
   classification: Classification;
@@ -59,6 +59,13 @@ export function decide(args: {
 
   counters.eligible += 1;
   catStats.eligible += 1;
+
+  // F9 progressive independence: a graduated category (sustained high
+  // proficiency over enough reps) has earned the right to skip the gate.
+  // Still counted as eligible so the stats stay honest.
+  if (hone.progressive !== false && graduated(profile, category)) {
+    return verdict(false, 'graduated-independent', classification);
+  }
 
   const budgetPct = normalizeBudget(hone.learning_budget);
   // Integer arithmetic: (budgetPct/100)*eligible accumulates float error

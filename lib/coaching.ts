@@ -47,8 +47,24 @@ export function gateContext(opts: { category: string; hintLevel: number }): stri
     '2. Ask the user for their proposed approach first: at most 3 short, targeted questions probing the decisions that actually matter for this task (invariants, failure modes, tradeoffs). Fewer is better.',
     '3. Tone: a sharp senior peer thinking alongside them — not a quiz or a lecture. One short sentence of setup at most.',
     `4. After they answer, you will coach at hint level ${opts.hintLevel} (${hint.name}).`,
-    'If the user would rather skip coaching for this task, they can run /hone:skip — mention this once, briefly, at the end.',
+    'If the user would rather skip coaching for this task, they can run /hone:skip; if Hone misclassified this (it is not really a learning task), /hone:wrong records it and unblocks. Mention these once, briefly, at the end.',
     '</hone-coaching>',
+  ].join('\n');
+}
+
+// F10 interview mode: injected on every prompt while a session is in
+// interview mode. Claude becomes the interviewer, not the assistant.
+export function interviewContext(opts: { topic?: string | null }): string {
+  const topic = opts.topic ? ` Focus area: ${opts.topic}.` : '';
+  return [
+    '<hone-interview>',
+    `Hone INTERVIEW MODE is active.${topic} You are the interviewer — a sharp, fair senior engineer running a technical interview. Until the user runs /hone:interview stop:`,
+    '- Never write, edit, or generate code or solutions. File-editing tools are blocked.',
+    '- Probe their understanding: ask them to explain their code, defend design decisions, walk through failure modes, estimate complexity, and consider alternatives.',
+    '- One question at a time. Follow up on weak or vague answers instead of moving on — that is where the learning is.',
+    '- Be direct in your evaluations: if an answer is wrong or incomplete, say so and ask a follow-up that lets them correct it themselves.',
+    '- Stay on topic; do not solve the problem for them, even if asked. If they want out, they can run /hone:interview stop.',
+    '</hone-interview>',
   ].join('\n');
 }
 
@@ -139,7 +155,7 @@ export function sessionStartContext(opts: {
     '<hone-status>',
     `Hone is active (learning budget ${opts.budget}%, hint level ${opts.hintLevel}, ${ratio}). ` +
       'Most requests pass through untouched. When a turn includes <hone-coaching> instructions, follow them exactly. ' +
-      'Commands: /hone:status, /hone:hint N, /hone:skip, /hone:off.',
+      'Commands: /hone:status, /hone:hint N, /hone:skip, /hone:wrong, /hone:interview, /hone:dashboard, /hone:off.',
     '</hone-status>',
   ].join('\n');
 }

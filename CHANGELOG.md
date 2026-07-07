@@ -3,6 +3,35 @@
 All notable changes to Hone are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-07-07
+
+Stage 2 — the loop closes: the skill profile now feeds back into how much Hone
+coaches, misclassifications become training data, and two new surfaces
+(interview mode, dashboard) put the profile to work.
+
+### Added
+- **Progressive independence (F9)** — a category with proficiency ≥85 across
+  ≥8 coached reps *graduates* and stops gating (still counted eligible, so the
+  stats stay honest). Proficiency decays 1 point per idle week (capped at 15)
+  so a stale graduation re-enters coaching naturally. New `progressive` config
+  key (default on); `/hone:status` shows a 🎓 marker.
+- **`/hone:wrong [note]`** — report a misclassification. Appends the last
+  routed prompt to `~/.claude/hone/misclassifications.jsonl` (your real-world
+  labeled set for classifier tuning) and, if the mistake is currently gating
+  you, unblocks WITHOUT the proficiency penalty a skip costs. Works in both
+  directions: false-coach and missed-learning.
+- **Interview mode (F10)** — `/hone:interview [topic]` flips the session:
+  Claude interviews you (explain code, defend decisions, walk failure modes),
+  one question at a time, file edits blocked, until `/hone:interview stop`.
+- **Local dashboard** — `/hone:dashboard` starts a zero-dependency server on
+  `127.0.0.1` (config `dashboard.port`, default 4173) rendering the skill
+  profile, counters, and graduation status live. `/hone:dashboard stop` ends it.
+
+### Changed
+- Hooks now record the last routed classification per session (powers
+  `/hone:wrong`).
+- Profile counters grew `corrections` and `interviews`.
+
 ## [0.3.0] — 2026-07-07
 
 Assertive defaults. Hone now leans into the learning hypothesis out of the box:

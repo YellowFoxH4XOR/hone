@@ -58,6 +58,15 @@ vanilla Claude Code, and nothing counts against the budget.
   the budget, while *strong* areas get more direct help. The profile is a
   **directional behavioral signal — not a graded test score** — and it's a
   no-op until it has learned enough about you to matter.
+- **Progressive independence** — a category you've mastered (proficiency ≥85
+  across ≥8 coached reps) *graduates*: it stops gating entirely. Mastery decays
+  gently with disuse, so a stale graduation re-enters coaching on its own. Set
+  `progressive: false` to keep coaching everything forever.
+- **Interview mode** — `/hone:interview [topic]` turns Claude into an
+  interviewer: explain your code, defend decisions, walk through failure modes.
+  No code gets written until `/hone:interview stop`.
+- **Local dashboard** — `/hone:dashboard` serves your skill profile live at
+  `http://127.0.0.1:4173` (loopback only; all data stays on your machine).
 
 Not feeling it today? `/hone:skip` and Claude just writes the code. Always.
 
@@ -78,8 +87,11 @@ ship a compiled fallback.)
 
 | Command | Effect |
 |---|---|
-| `/hone:status` | Hint level, budget usage, gate state, per-category stats |
+| `/hone:status` | Hint level, budget usage, gate state, skill profile |
 | `/hone:skip` | Skip the gate for the current task — implement directly |
+| `/hone:wrong [note]` | Report a misclassification — logs it locally, unblocks the gate with no proficiency penalty |
+| `/hone:interview [topic]` | Interview mode: Claude probes your understanding, no code written (`stop` to end) |
+| `/hone:dashboard` | Local skill-profile dashboard at `http://127.0.0.1:4173` (`stop` to end) |
 | `/hone:hint <0-5>` | Set the hint level |
 | `/hone:off` / `/hone:on` | Disable / enable entirely |
 
