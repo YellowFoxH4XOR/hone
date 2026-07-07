@@ -17,6 +17,7 @@ export const DEFAULTS: HoneConfig = {
     autofeedback: true, // F5: review code written during coached tasks
     adaptive: true, // F7: bias coaching by per-category proficiency (no-op at neutral)
     progressive: true, // F9: graduated categories (85+ over 8+ reps) stop gating
+    onboarding: true, // F9: soften the coaching rate for a new user's first ~5 eligible tasks
     categories: {
       always_coach: ['architecture', 'concurrency', 'distributed_systems', 'security'],
       // Execution-type tasks (tests, boilerplate, crud, ...) are never coached

@@ -74,11 +74,13 @@ run(async (input) => {
     }
     state.saveProfile(profile);
 
-    // F7 adaptive: bend the hint level toward the user's proficiency here.
+    // F7 adaptive + F9 cold-start: bend the hint level toward the user's
+    // proficiency, floor a not-yet-known category at guided help, and cap it at
+    // the per-category ceiling (debugging stays Socratic).
     const adj = skills.adaptiveAdjustment(profile, category, {
       adaptive: config.hone.adaptive !== false,
     });
-    const hintLevel = skills.effectiveHint(baseHint, adj.hintDelta);
+    const hintLevel = skills.coachingHint(profile, category, baseHint, adj.hintDelta);
 
     inject(
       coaching.coachingContext({
@@ -134,14 +136,15 @@ run(async (input) => {
   recordLast(true);
   state.saveSession(sessionId, session);
 
-  // F7 adaptive: weak areas get more Socratic questioning up front.
+  // F7 adaptive + F9 cold-start: weak areas get more Socratic questioning, a
+  // not-yet-known category is floored at guided help, and debugging is capped.
   const adj = skills.adaptiveAdjustment(profile, decision.category, {
     adaptive: config.hone.adaptive !== false,
   });
   inject(
     coaching.gateContext({
       category: decision.category,
-      hintLevel: skills.effectiveHint(config.hone.hint_level, adj.hintDelta),
+      hintLevel: skills.coachingHint(profile, decision.category, config.hone.hint_level, adj.hintDelta),
     }),
   );
 });

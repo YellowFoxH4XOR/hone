@@ -5,7 +5,52 @@ All notable changes to Hone are documented here. This project follows
 
 ## [Unreleased]
 
+### Fixed
+- **Graduation was a permanent badge (irreversible-graduation bug).** Idle
+  decay was capped at 15 points, exactly `100 − GRADUATE_PROFICIENCY(85)`, so a
+  category that ever hit proficiency 100 could never decay below the graduation
+  bar — `graduated()` stayed true forever, contradicting the code's own "so
+  graduation is reversible" comment. The decay cap is now 40, so even a
+  fully-mastered skill falls out of graduation after enough idle weeks (the
+  neutral-baseline floor still bounds it).
+- **`always_coach` was silently overridden by graduation.** `budget.decide()`
+  returned `graduated-independent` *before* it checked whether the category was
+  pinned to `always_coach`, so a category the user explicitly asked to always
+  coach (e.g. `security`) stopped gating the moment it graduated. The pin is now
+  checked first and outranks auto-graduation.
+- **`/hone:off` → `/hone:on` stale-gate hijack.** `setEnabled()` only ever
+  wrote `state.json`; it never touched session state, so a Solution Gate left
+  `pending` at the moment of `/hone:off` survived the round trip. The next
+  prompt after `/hone:on` — however unrelated to the original coached task —
+  was silently treated as "the answer" to that stale gate: marked answered,
+  coached on a category the user wasn't thinking about, and logged a skill
+  signal off zero relevant input. `/hone:off` now resets a still-open gate for
+  the current session to `idle` (new `gate.reset()`) before writing the
+  runtime toggle, so `/hone:on` always starts clean. This landed right on the
+  exact self-help action (disable, then re-enable) a frustrated user is most
+  likely to take.
+
 ### Changed
+- **Cold-start guidance instead of hint-0 for unknown topics.** Minimal-guidance
+  coaching is the wrong default for a topic the user has never worked — worked
+  examples beat unguided problem-solving for novices (Kirschner, Sweller & Clark
+  2006; Kalyuga's expertise-reversal effect), and a 2026 CHIWORK RCT found a
+  "guided hints" condition produced the largest learning gains *and* the lowest
+  frustration of every condition tested. A category with no track record is now
+  floored at hint level 2 ("high-level ideas") for its first few coached tasks,
+  then relaxes to the user's dial. The floor only *raises* a lower setting; it
+  never overrides a higher one.
+- **Debugging is carved out both ways.** It is the skill most damaged by AI
+  assistance and the one where pure question-asking won (Shen & Tamkin 2026,
+  arXiv:2601.20245), so it keeps its hint-0 cold start (no floor), holds a lower
+  coaching ceiling (never past "high-level ideas"), and needs 12 reps to
+  graduate instead of 8. `/hone:skip` and `/hone:hint 5` still bypass coaching
+  entirely.
+- **Onboarding coaching-rate ramp.** A brand-new install no longer opens at the
+  full (default 100%) coaching rate — front-loaded friction is what gets a tool
+  uninstalled before it proves itself. The effective learning budget is capped
+  at 50% for a user's first ~5 eligible tasks, then the real budget takes over.
+  New `onboarding` setting (default `true`; set `false` to disable).
 - **Autonomy-supportive Solution Gate copy.** A hard PreToolUse deny is
   need-thwarting, not merely unsupportive (Bartholomew et al. 2011), so the
   gate and deny-reason copy now lead with a *rationale* ("putting your own
@@ -23,19 +68,6 @@ All notable changes to Hone are documented here. This project follows
   require a plain up-front verdict — *right / partially right / wrong*, naming
   what is genuinely sound — before any critique. `skills/socratic-review`
   rule 3 gets the same requirement.
-
-### Fixed
-- **`/hone:off` → `/hone:on` stale-gate hijack.** `setEnabled()` only ever
-  wrote `state.json`; it never touched session state, so a Solution Gate left
-  `pending` at the moment of `/hone:off` survived the round trip. The next
-  prompt after `/hone:on` — however unrelated to the original coached task —
-  was silently treated as "the answer" to that stale gate: marked answered,
-  coached on a category the user wasn't thinking about, and logged a skill
-  signal off zero relevant input. `/hone:off` now resets a still-open gate for
-  the current session to `idle` (new `gate.reset()`) before writing the
-  runtime toggle, so `/hone:on` always starts clean. This landed right on the
-  exact self-help action (disable, then re-enable) a frustrated user is most
-  likely to take.
 
 ### Added
 - **`/hone:budget <0-100>`** and **`/hone:reflection <off|optional|on>`** —

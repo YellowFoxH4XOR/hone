@@ -5,12 +5,18 @@ import {
   proficiencyOf,
   adaptiveAdjustment,
   effectiveHint,
+  coachingHint,
+  coldStartHintFloor,
   ensureSkill,
   decayedProficiency,
   graduated,
   BASELINE,
   GRADUATE_PROFICIENCY,
   GRADUATE_REPS,
+  DEBUG_GRADUATE_REPS,
+  COLD_START_REPS,
+  COLD_START_HINT_FLOOR,
+  DEBUG_HINT_CEILING,
 } from '../lib/skills.ts';
 import type { Profile } from '../lib/types.ts';
 
@@ -47,7 +53,7 @@ test('F9: graduation requires BOTH high proficiency and enough reps', () => {
   assert.strictEqual(graduated(p, 'concurrency'), false, 'unseen category never graduates');
 });
 
-test('F9: proficiency decays toward baseline with disuse, capped, and reverses graduation', () => {
+test('F9: proficiency decays toward baseline with disuse, and stale mastery loses graduation', () => {
   const p = freshProfile();
   const tenWeeksAgo = new Date(Date.now() - 10 * 7 * 24 * 3600 * 1000).toISOString();
   p.skills['algorithms'] = {
@@ -56,16 +62,24 @@ test('F9: proficiency decays toward baseline with disuse, capped, and reverses g
   assert.strictEqual(decayedProficiency(p, 'algorithms'), 80); // -1/idle week
   assert.strictEqual(graduated(p, 'algorithms'), false, 'stale mastery re-enters coaching');
 
-  // Decay is capped: even a year idle never wipes the signal.
+  // Regression: a FULLY mastered skill (proficiency 100) must still lose
+  // graduation once it goes stale. The old DECAY_CAP of 15 floored a maxed
+  // skill at 100-15 = 85 == the graduation bar itself, so graduated() stayed
+  // true forever — a permanent badge. DECAY_CAP=40 lets it fall to 60.
   const yearAgo = new Date(Date.now() - 52 * 7 * 24 * 3600 * 1000).toISOString();
-  p.skills['algorithms']!.last_updated = yearAgo;
-  assert.strictEqual(decayedProficiency(p, 'algorithms'), 90 - 15);
+  p.skills['mastery'] = {
+    proficiency: 100, reps: 12, independent_reps: 12, assisted_reps: 0, last_updated: yearAgo,
+  };
+  assert.strictEqual(decayedProficiency(p, 'mastery'), 60); // 100 - DECAY_CAP(40)
+  assert.strictEqual(graduated(p, 'mastery'), false, 'a maxed skill still un-graduates when stale');
 
-  // Drifts toward baseline from below too, never crossing it.
+  // Decay never crosses baseline, from either side.
   p.skills['weakness'] = {
     proficiency: 44, reps: 3, independent_reps: 0, assisted_reps: 3, last_updated: yearAgo,
   };
   assert.strictEqual(decayedProficiency(p, 'weakness'), BASELINE);
+  p.skills['algorithms']!.last_updated = yearAgo;
+  assert.strictEqual(decayedProficiency(p, 'algorithms'), BASELINE); // 90 floored at neutral
 
   // Fresh activity -> no decay.
   p.skills['algorithms']!.last_updated = new Date().toISOString();
@@ -130,6 +144,52 @@ test('effectiveHint clamps so adaptivity never reaches vanilla (5) or below 0', 
   assert.strictEqual(effectiveHint(4, 1), 4); // never bumps a coached task to 5
   assert.strictEqual(effectiveHint(1, -1), 0);
   assert.strictEqual(effectiveHint(3, 1), 4);
+});
+
+test('cold-start floors a not-yet-known category at guided help, but never debugging', () => {
+  const p = freshProfile();
+  // No reps in architecture -> floored at guided help.
+  assert.strictEqual(coldStartHintFloor(p, 'architecture'), COLD_START_HINT_FLOOR);
+  // Debugging is exempt -> no floor, keeps its hint-0 cold start.
+  assert.strictEqual(coldStartHintFloor(p, 'debugging'), 0);
+  // Once a track record exists the floor lifts.
+  p.skills['architecture'] = {
+    proficiency: 50, reps: COLD_START_REPS, independent_reps: 1, assisted_reps: 2, last_updated: null,
+  };
+  assert.strictEqual(coldStartHintFloor(p, 'architecture'), 0);
+});
+
+test('coachingHint: floor raises a cold-start category; ceiling caps debugging; floor never lowers', () => {
+  const p = freshProfile();
+  // New architecture task at base hint 0 -> floored up to guided help.
+  assert.strictEqual(coachingHint(p, 'architecture', 0, 0), COLD_START_HINT_FLOOR);
+  // A user who set a higher hint keeps it — the floor only raises.
+  assert.strictEqual(coachingHint(p, 'architecture', 3, 0), 3);
+  // Debugging: no cold-start floor, and capped at its ceiling even when pushed.
+  assert.strictEqual(coachingHint(p, 'debugging', 0, 0), 0);
+  assert.strictEqual(coachingHint(p, 'debugging', 4, 1), DEBUG_HINT_CEILING);
+  // An established category behaves like plain effectiveHint again.
+  p.skills['performance'] = {
+    proficiency: 50, reps: 5, independent_reps: 3, assisted_reps: 2, last_updated: null,
+  };
+  assert.strictEqual(coachingHint(p, 'performance', 0, 0), 0);
+});
+
+test('F9: debugging earns independence more slowly than other skills', () => {
+  const p = freshProfile();
+  const fresh = new Date().toISOString();
+  // The normal reps count graduates a normal skill...
+  p.skills['algorithms'] = {
+    proficiency: 90, reps: GRADUATE_REPS, independent_reps: 8, assisted_reps: 0, last_updated: fresh,
+  };
+  assert.strictEqual(graduated(p, 'algorithms'), true);
+  // ...but the same count is not enough for debugging.
+  p.skills['debugging'] = {
+    proficiency: 90, reps: GRADUATE_REPS, independent_reps: 8, assisted_reps: 0, last_updated: fresh,
+  };
+  assert.strictEqual(graduated(p, 'debugging'), false, 'debugging needs more reps');
+  p.skills['debugging']!.reps = DEBUG_GRADUATE_REPS;
+  assert.strictEqual(graduated(p, 'debugging'), true);
 });
 
 test('ensureSkill self-heals a corrupt/hand-edited skill entry', () => {

@@ -107,6 +107,7 @@ export interface HoneSettings {
   autofeedback: boolean; // F5: review code written during coached tasks
   adaptive: boolean; // F7: bias coaching by per-category proficiency
   progressive: boolean; // F9: graduated categories (85+ proficiency, 8+ reps) stop gating
+  onboarding: boolean; // F9: soften the coaching rate for a new user's first few eligible tasks
   categories: {
     always_coach: string[];
     never_coach: string[];

@@ -33,13 +33,44 @@ const STRONG = 70; // above this: back off, more direct
 // independence and stops gating entirely.
 export const GRADUATE_PROFICIENCY = 85;
 export const GRADUATE_REPS = 8;
+// Debugging is the skill most damaged by AI assistance, and pure question-
+// asking beat every richer hint pattern for it (Shen & Tamkin 2026,
+// arXiv:2601.20245). So it earns independence more slowly than other skills.
+export const DEBUG_GRADUATE_REPS = 12;
+
+export function graduateReps(category: string): number {
+  return category === 'debugging' ? DEBUG_GRADUATE_REPS : GRADUATE_REPS;
+}
+
 // Unused skills decay toward baseline (1 point per idle week, capped) so
 // graduation is reversible rather than a permanent badge.
 const DECAY_PER_WEEK = 1;
-const DECAY_CAP = 15;
+// The cap MUST exceed (100 - GRADUATE_PROFICIENCY) = 15. With the old cap of
+// exactly 15 a maxed-out skill (proficiency 100) floored at 100-15 = 85 — the
+// graduation bar itself — so graduated() stayed true forever and "reversible"
+// was a lie. 40 lets even a fully-mastered skill fall out of graduation after
+// ~16 idle weeks; the BASELINE floor still stops the drift at neutral.
+const DECAY_CAP = 40;
 
 // Hint level at or below which answering the gate counts as "independent".
 export const INDEPENDENT_HINT_CEILING = 2;
+
+// Cold-start guidance (F9 calibration). A category with almost no track record
+// gives no evidence the user is an expert, and minimal-guidance coaching
+// (hint 0, pure Socratic) is the wrong default for a likely novice: worked
+// examples beat unguided problem-solving for novices (Kirschner, Sweller &
+// Clark 2006; Kalyuga's expertise-reversal effect), and a 2026 CHIWORK RCT
+// found a "guided hints" condition produced the largest learning gains AND the
+// lowest frustration of every condition tested. So until a category has a few
+// reps, coaching is floored at a guided level rather than pure questions.
+export const COLD_START_REPS = 3;
+export const COLD_START_HINT_FLOOR = 2; // "high-level ideas" — guided, not solved
+// Debugging is the deliberate exception on BOTH levers: it keeps its hint-0
+// cold start (no floor), and it holds a lower coaching ceiling so even a strong
+// or insistent signal can't push a coached debugging task past high-level ideas
+// into pseudocode/partial code. (/hone:skip and /hone:hint 5 still bypass
+// coaching entirely, so this bounds coaching depth, not the user's options.)
+export const DEBUG_HINT_CEILING = 2;
 
 export function ensureSkill(profile: Profile, category: string): SkillStats {
   if (!profile.skills) profile.skills = {};
@@ -81,7 +112,7 @@ export function decayedProficiency(profile: Profile, category: string, now = new
 // answer degrades naturally with disuse.
 export function graduated(profile: Profile, category: string, now = new Date()): boolean {
   const s = profile.skills?.[category];
-  if (!s || !Number.isInteger(s.reps) || s.reps < GRADUATE_REPS) return false;
+  if (!s || !Number.isInteger(s.reps) || s.reps < graduateReps(category)) return false;
   return decayedProficiency(profile, category, now) >= GRADUATE_PROFICIENCY;
 }
 
@@ -127,4 +158,35 @@ export function adaptiveAdjustment(
 // pushes a coached task down to 5 (vanilla) or below 0.
 export function effectiveHint(baseHint: number, delta: number): number {
   return clamp(baseHint + delta, 0, 4);
+}
+
+// The cold-start FLOOR for a category: the minimum hint level a not-yet-known
+// category is coached at. 0 (no floor) once the user has a track record, and
+// always 0 for debugging (see DEBUG_HINT_CEILING notes).
+export function coldStartHintFloor(profile: Profile, category: string): number {
+  if (category === 'debugging') return 0;
+  const s = profile.skills?.[category];
+  const reps = s && Number.isInteger(s.reps) ? s.reps : 0;
+  return reps < COLD_START_REPS ? COLD_START_HINT_FLOOR : 0;
+}
+
+// The per-category coaching CEILING: the highest hint level coaching will reach
+// for this category. 4 everywhere except debugging, which stays Socratic.
+export function categoryHintCeiling(category: string): number {
+  return category === 'debugging' ? DEBUG_HINT_CEILING : 4;
+}
+
+// The single hint-level entry point for the coaching hooks. Order matters:
+// base+adaptive delta, then RAISE to the cold-start floor (a floor never lowers
+// a level the user or adaptivity set higher), then CAP at the category ceiling
+// (applied last, so the floor can never punch through it). A user who wants out
+// of a low ceiling entirely still has /hone:hint 5 and /hone:skip.
+export function coachingHint(
+  profile: Profile,
+  category: string,
+  baseHint: number,
+  delta: number,
+): number {
+  const floored = Math.max(effectiveHint(baseHint, delta), coldStartHintFloor(profile, category));
+  return Math.min(floored, categoryHintCeiling(category));
 }
