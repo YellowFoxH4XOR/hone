@@ -15,6 +15,7 @@ import { classify } from '../lib/classifier.ts';
 import * as budget from '../lib/budget.ts';
 import * as gate from '../lib/gate.ts';
 import * as coaching from '../lib/coaching.ts';
+import * as skills from '../lib/skills.ts';
 
 function inject(text: string): void {
   emit({
@@ -42,6 +43,7 @@ run(async (input) => {
   if (prompt.trimStart().startsWith('/')) return;
 
   const session = state.loadSession(sessionId);
+  const category = session.category || 'learning';
 
   // The user is answering an open Solution Gate.
   if (gate.isBlocking(session)) {
@@ -50,15 +52,32 @@ run(async (input) => {
 
     const profile = state.loadProfile();
     if (!profile.counters) {
-      profile.counters = { eligible: 0, coached: 0, skipped: 0, gates_answered: 0 };
+      profile.counters = { eligible: 0, coached: 0, skipped: 0, gates_answered: 0, reflections: 0 };
     }
     profile.counters.gates_answered = (profile.counters.gates_answered || 0) + 1;
+
+    // F7: answering the gate at a low hint level counts as working it
+    // independently; leaning on a high hint level counts as assisted.
+    const baseHint = config.hone.hint_level;
+    const independent = baseHint <= skills.INDEPENDENT_HINT_CEILING;
+    if (session.category) {
+      skills.recordOutcome(profile, session.category, {
+        independent,
+        at: new Date().toISOString(),
+      });
+    }
     state.saveProfile(profile);
+
+    // F7 adaptive: bend the hint level toward the user's proficiency here.
+    const adj = skills.adaptiveAdjustment(profile, category, {
+      adaptive: config.hone.adaptive !== false,
+    });
+    const hintLevel = skills.effectiveHint(baseHint, adj.hintDelta);
 
     inject(
       coaching.coachingContext({
-        category: session.category || 'learning',
-        hintLevel: config.hone.hint_level,
+        category,
+        hintLevel,
         reviewOnly: config.hone.review_only !== false,
       }),
     );
@@ -82,12 +101,18 @@ run(async (input) => {
   if (!decision.coach) return;
 
   gate.open(session, { category: decision.category, prompt });
+  // F5: a fresh coached task — allow one auto-feedback pass again.
+  session.feedback_given = false;
   state.saveSession(sessionId, session);
 
+  // F7 adaptive: weak areas get more Socratic questioning up front.
+  const adj = skills.adaptiveAdjustment(profile, decision.category, {
+    adaptive: config.hone.adaptive !== false,
+  });
   inject(
     coaching.gateContext({
       category: decision.category,
-      hintLevel: config.hone.hint_level,
+      hintLevel: skills.effectiveHint(config.hone.hint_level, adj.hintDelta),
     }),
   );
 });

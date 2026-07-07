@@ -37,7 +37,7 @@ process.stdin.on('end', () => {
     }
 
     const profile = state.loadProfile();
-    const c = profile.counters ?? { eligible: 0, coached: 0, skipped: 0, gates_answered: 0 };
+    const c = profile.counters ?? { eligible: 0, coached: 0, skipped: 0, gates_answered: 0, reflections: 0 };
     const sessionId = stdinJson.session_id || state.currentSessionId();
     const session = sessionId ? state.loadSession(sessionId) : null;
     const gateMark =

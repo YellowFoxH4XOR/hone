@@ -23,6 +23,7 @@ import type {
   HoneSettings,
   Profile,
 } from './types.ts';
+import { adaptiveAdjustment } from './skills.ts';
 
 export function decide(args: {
   classification: Classification;
@@ -63,19 +64,30 @@ export function decide(args: {
   // Integer arithmetic: (budgetPct/100)*eligible accumulates float error
   // (0.35*180 === 62.999…) and silently under-coaches at exact boundaries.
   const withinBudget = (counters.coached + 1) * 100 <= budgetPct * counters.eligible;
+
+  // F7 adaptive coaching: weak areas (low proficiency) bias toward coaching by
+  // bypassing the budget, exactly like an always_coach category. A no-op at
+  // neutral proficiency, so the exact-budget guarantee holds until real signal
+  // accumulates.
+  const adaptive = adaptiveAdjustment(profile, category, { adaptive: hone.adaptive !== false });
   const pinned = always.includes(category);
-  const coach = pinned || withinBudget;
+  const coach = pinned || adaptive.pinCoach || withinBudget;
 
   if (coach) {
     counters.coached += 1;
     catStats.coached += 1;
   }
 
-  const reason: BudgetReason = coach
-    ? pinned && !withinBudget
-      ? 'always-coach-category'
-      : 'within-budget'
-    : 'over-budget';
+  let reason: BudgetReason;
+  if (!coach) {
+    reason = 'over-budget';
+  } else if (withinBudget) {
+    reason = 'within-budget';
+  } else if (pinned) {
+    reason = 'always-coach-category';
+  } else {
+    reason = 'adaptive-weak-area';
+  }
   return verdict(coach, reason, classification);
 }
 
@@ -100,7 +112,7 @@ function listOf(hone: Partial<HoneSettings>, key: 'always_coach' | 'never_coach'
   return Array.isArray(list) ? list.map(String) : [];
 }
 
-const COUNTER_KEYS = ['eligible', 'coached', 'skipped', 'gates_answered'] as const;
+const COUNTER_KEYS = ['eligible', 'coached', 'skipped', 'gates_answered', 'reflections'] as const;
 
 function ensureCounters(profile: Profile): Counters {
   if (!profile.counters) profile.counters = {} as Counters;

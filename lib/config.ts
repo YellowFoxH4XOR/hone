@@ -13,7 +13,9 @@ export const DEFAULTS: HoneConfig = {
     hint_level: 1,
     review_only: true,
     allow_full_solution: true,
-    reflection: 'optional', // off | optional | on  (Stage 1 feature; stored now)
+    reflection: 'optional', // off | optional | on  (F6)
+    autofeedback: true, // F5: review code written during coached tasks
+    adaptive: true, // F7: bias coaching by per-category proficiency (no-op at neutral)
     categories: {
       always_coach: ['architecture', 'concurrency', 'distributed_systems', 'security'],
       // Execution-type tasks (tests, boilerplate, crud, ...) are never coached
@@ -104,7 +106,9 @@ hone:
   hint_level: 1                # 0 questions-only ... 5 full implementation (vanilla)
   review_only: true            # never rewrite your code unless you ask
   allow_full_solution: true    # reserved (Stage 1); /hone:skip is always available
-  reflection: optional         # off | optional | on   (Stage 1)
+  reflection: optional         # off | optional | on — a once-per-session recap after coached work
+  autofeedback: true           # review code written during a coached task (senior-lens, no rewrite)
+  adaptive: true               # bias coaching by your per-category skill profile (no-op until it learns)
   categories:
     # always_coach bypasses the budget. never_coach mutes LEARNING categories
     # (e.g. [performance, new_framework]) — execution tasks (tests, boilerplate,

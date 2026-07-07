@@ -38,7 +38,9 @@ test('marketplace.json points at this repo as a single-plugin marketplace', () =
 test('every hook command in hooks.json references a file that exists', () => {
   const hooks = JSON.parse(read('hooks/hooks.json'));
   const events = Object.keys(hooks.hooks);
-  assert.ok(events.length >= 4, 'SessionStart/UserPromptSubmit/PreToolUse/Stop expected');
+  for (const required of ['SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'Stop']) {
+    assert.ok(events.includes(required), `hooks.json must register ${required}`);
+  }
   for (const event of events) {
     for (const matcher of hooks.hooks[event]) {
       for (const hook of matcher.hooks) {

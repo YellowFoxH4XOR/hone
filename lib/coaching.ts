@@ -88,6 +88,38 @@ export function gateDenyReason(session: { category?: string | null } | null | un
   );
 }
 
+// F5 auto-feedback: injected after code is written during a coached task.
+// The point is teaching-through-review, not silent correction.
+export function autoFeedbackContext(opts: { category: string; reviewOnly: boolean }): string {
+  const lines = [
+    '<hone-coaching>',
+    `Hone: code was just written during a coached ${opts.category} task. Before moving on, give the user a brief senior-lens review so they learn what to look for:`,
+    '- 2-4 lines, not a rewrite: name the edge cases, failure modes, or assumptions worth a second look here specifically.',
+    '- Frame it as "here is what I would check", not "here is what is wrong".',
+    '- End with one question that makes them pressure-test the code themselves.',
+  ];
+  if (opts.reviewOnly) {
+    lines.push('- Do not silently change the code you just wrote in the name of the review; if a change is warranted, tell them what and why and let them decide.');
+  }
+  lines.push('</hone-coaching>');
+  return lines.join('\n');
+}
+
+// F6 reflection: the Stop-hook block reason. Making Claude ask the user to
+// recap consolidates the learning; it fires at most once per coached session.
+export function reflectionPrompt(opts: { category: string }): string {
+  return [
+    '<hone-reflection>',
+    `Hone: a coached ${opts.category} task just wrapped. Before ending, invite a short reflection (this fires once per session):`,
+    'Ask the user, warmly and briefly, 1-2 of these — whichever fit what they just did:',
+    '- What was the hardest part, and what finally made it click?',
+    '- What would you do differently if you hit this again?',
+    '- In one or two sentences, explain the solution back without looking.',
+    'Keep it to a couple of sentences of framing. Make clear it is optional — if they would rather just move on, that is completely fine and they should say so.',
+    '</hone-reflection>',
+  ].join('\n');
+}
+
 // SessionStart: one terse line of standing context so Claude knows Hone
 // exists and where the dials are. Deliberately does not change behavior on
 // uncoached turns.

@@ -6,10 +6,11 @@ import type { Classification, HoneConfig, Profile } from '../lib/types.ts';
 
 function freshProfile(): Profile {
   return {
-    version: 1,
+    version: 2,
     created_at: 'test',
-    counters: { eligible: 0, coached: 0, skipped: 0, gates_answered: 0 },
+    counters: { eligible: 0, coached: 0, skipped: 0, gates_answered: 0, reflections: 0 },
     categories: {},
+    skills: {},
     hint_history: [],
   };
 }
@@ -95,6 +96,34 @@ test('always_coach categories bypass the ratio but still count against it', () =
   const second = decide({ classification: learningTask('debugging'), config: cfg, profile });
   assert.strictEqual(second.coach, false);
   assert.strictEqual(second.reason, 'over-budget');
+});
+
+test('F7 adaptive: a weak-proficiency category bypasses the budget', () => {
+  const profile = freshProfile();
+  // Make debugging weak: proficiency < 40.
+  profile.skills['debugging'] = {
+    proficiency: 20, reps: 3, independent_reps: 0, assisted_reps: 3, last_updated: null,
+  };
+  // budget 0 => the ONLY path to coaching is the adaptive weak-area bypass.
+  const cfg = config({ learning_budget: 0, adaptive: true, categories: { always_coach: [], never_coach: [] } });
+  const neutral = decide({ classification: learningTask('performance'), config: cfg, profile });
+  assert.strictEqual(neutral.coach, false, 'neutral category respects the 0% budget');
+  const weak = decide({ classification: learningTask('debugging'), config: cfg, profile });
+  assert.strictEqual(weak.coach, true);
+  assert.strictEqual(weak.reason, 'adaptive-weak-area');
+});
+
+test('F7 adaptive off leaves the budget strictly deterministic even for weak areas', () => {
+  const profile = freshProfile();
+  profile.skills['debugging'] = {
+    proficiency: 5, reps: 5, independent_reps: 0, assisted_reps: 5, last_updated: null,
+  };
+  const cfg = config({ adaptive: false, categories: { always_coach: [], never_coach: [] } });
+  const fired: number[] = [];
+  for (let i = 1; i <= 15; i++) {
+    if (decide({ classification: learningTask('debugging'), config: cfg, profile }).coach) fired.push(i);
+  }
+  assert.deepStrictEqual(fired, [5, 10, 15]); // identical to the non-adaptive schedule
 });
 
 test('never_coach categories are excluded before counters', () => {

@@ -8,6 +8,7 @@ import * as state from '../lib/state.ts';
 import * as configLib from '../lib/config.ts';
 import * as gateLib from '../lib/gate.ts';
 import * as coaching from '../lib/coaching.ts';
+import * as skills from '../lib/skills.ts';
 
 function main(argv: string[]): number {
   const [verb, ...args] = argv;
@@ -33,7 +34,9 @@ function status(): number {
   const config = configLib.effective(configLib.loadConfig({ cwd: process.cwd() }), runtime);
   const hone = config.hone;
   const profile = state.loadProfile();
-  const counters = profile.counters ?? { eligible: 0, coached: 0, skipped: 0, gates_answered: 0 };
+  const counters = profile.counters ?? {
+    eligible: 0, coached: 0, skipped: 0, gates_answered: 0, reflections: 0,
+  };
   const sessionId = state.currentSessionId();
   const session = sessionId ? state.loadSession(sessionId) : null;
   const hint = coaching.hintRule(hone.hint_level);
@@ -44,10 +47,29 @@ function status(): number {
   lines.push(
     `Learning budget: ${hone.learning_budget}% — coached ${counters.coached}/${counters.eligible} eligible learning tasks`,
   );
-  lines.push(`Gates answered: ${counters.gates_answered} · skipped: ${counters.skipped}`);
+  lines.push(
+    `Gates answered: ${counters.gates_answered} · skipped: ${counters.skipped} · reflections: ${counters.reflections ?? 0}`,
+  );
   lines.push(
     `Current session gate: ${gateLib.describe(session)}${session?.category ? ` (${session.category})` : ''}`,
   );
+
+  // F7: skill profile bars (directional).
+  const skillEntries = Object.entries(profile.skills ?? {}).filter(([, s]) => s && s.reps > 0);
+  if (skillEntries.length > 0) {
+    lines.push('Skill profile (directional — reflects how you engage coaching, not test scores):');
+    for (const [name, s] of skillEntries.sort((a, b) => b[1].proficiency - a[1].proficiency)) {
+      const filled = Math.round(skills.proficiencyOf(profile, name) / 10);
+      const bar = '█'.repeat(filled) + '░'.repeat(10 - filled);
+      const band = adaptiveBand(s.proficiency);
+      lines.push(
+        `  ${name.padEnd(20)} ${bar} ${String(Math.round(s.proficiency)).padStart(3)}  (${s.independent_reps} indep / ${s.reps} reps${band ? `, ${band}` : ''})`,
+      );
+    }
+    if (hone.adaptive !== false) {
+      lines.push('  Adaptive coaching ON — weak areas get more Socratic + bypass the budget; strong areas get more direct.');
+    }
+  }
 
   const cats = Object.entries(profile.categories ?? {});
   if (cats.length > 0) {
@@ -60,6 +82,12 @@ function status(): number {
   lines.push(`State dir: ${state.honeDir()}`);
   console.log(lines.join('\n'));
   return 0;
+}
+
+function adaptiveBand(proficiency: number): string {
+  if (proficiency < 40) return 'weak';
+  if (proficiency > 70) return 'strong';
+  return '';
 }
 
 function setEnabled(enabled: boolean): number {
@@ -102,15 +130,24 @@ function skip(args: string[]): number {
     return 0;
   }
   const session = state.loadSession(sessionId);
+  const skippedCategory = session.category;
   const wasPending = gateLib.skip(session);
   state.saveSession(sessionId, session);
 
   if (wasPending) {
     const profile = state.loadProfile();
     if (!profile.counters) {
-      profile.counters = { eligible: 0, coached: 0, skipped: 0, gates_answered: 0 };
+      profile.counters = { eligible: 0, coached: 0, skipped: 0, gates_answered: 0, reflections: 0 };
     }
     profile.counters.skipped = (profile.counters.skipped || 0) + 1;
+    // F7: skipping coaching is an "assisted" signal — the user wanted the
+    // answer, not to work it — so it nudges proficiency down for that area.
+    if (skippedCategory) {
+      skills.recordOutcome(profile, skippedCategory, {
+        independent: false,
+        at: new Date().toISOString(),
+      });
+    }
     state.saveProfile(profile);
     console.log(
       'Solution Gate skipped for this task — Claude will implement directly. (Skips are tracked in /hone:status.)',
