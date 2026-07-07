@@ -5,14 +5,14 @@
     "url": "https://github.com/YellowFoxH4XOR"
   },
   "metadata": {
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Hone — a behavioral layer for Claude Code that makes developers better engineers, not just faster ones."
   },
   "plugins": [
     {
       "name": "hone",
       "source": "./",
-      "description": "Intent routing, learning budget, solution gate, hint levels, and Socratic reviews — coaching on the ~20% of tasks where thinking matters, invisible on the rest.",
+      "description": "Coaching on the ~20% of tasks where thinking matters, invisible on the rest: intent routing, learning budget, solution gate, hint levels, Socratic reviews, auto-feedback, reflection, and an adaptive skill profile.",
       "category": "development",
       "tags": ["coaching", "learning", "developer-growth"]
     }
