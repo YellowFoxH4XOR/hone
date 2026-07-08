@@ -5,6 +5,25 @@ All notable changes to Hone are documented here. This project follows
 
 ## [Unreleased]
 
+### Changed
+- **Reflection is now deferred to the next session, not blocked at Stop.** F6
+  used to `decision:block` the Stop hook to force a reflection at session exit —
+  the worst-timed, highest-friction moment (Eleftheriou et al., CHIWORK'26, flag
+  it as an abandonment risk), and an immediate self-judgment predicts retention
+  worse than a delayed one (Nelson & Dunlosky 1991, the delayed-JOL effect). A
+  coached session now *queues* a reflection that the next session surfaces
+  non-blocking, at the moment a short delayed recall does the most good. This
+  also fixes a real cadence bug: `reflection_done` was set once per session and
+  never reset (unlike `feedback_given`), so in a long session only the first
+  coached task ever got a reflection. It's kept embedded rather than an opt-in
+  link (which sees ~10% uptake — Kumar et al. 2024). **Product note:** this
+  removes the guaranteed same-session reflection; see the PR for the tradeoff.
+- **Skill-staleness nudge at session start.** A skill whose idle decay has pulled
+  it well below its peak gets one gentle "this has gone quiet" line — spaced
+  review at the point of impending forgetting is what the spacing effect rewards
+  (Cepeda et al. 2006, 317-experiment meta-analysis). Reuses the decay math
+  already on the profile; no new data captured.
+
 ### Fixed
 - **Classifier ignored a closing instruction after a leading question.** The
   imperative/interrogative checks were `^`-anchored to the whole prompt, so

@@ -150,32 +150,67 @@ test('F5 auto-feedback fires once per coached task after code is written', () =>
   assert.strictEqual(second, null, 'auto-feedback is once per coached task');
 });
 
-test('F6 reflection fires once per coached session via a Stop block', () => {
+test('F6 reflection is deferred to the next session start, never blocked at Stop', () => {
   runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
   runHook('user-prompt-submit.ts', {
     session_id: SESSION, cwd: tmpDir,
     prompt: 'we keep hitting a race condition when two workers claim the same job',
   });
   runHook('user-prompt-submit.ts', {
-    session_id: SESSION, cwd: tmpDir, prompt: 'row-level locking, i think',
+    session_id: SESSION, cwd: tmpDir, prompt: 'row-level locking with SELECT FOR UPDATE SKIP LOCKED',
   });
-  // Gate is 'answered' -> Stop blocks to ask for reflection.
-  const first = runHook('stop.ts', { session_id: SESSION, cwd: tmpDir });
-  assert.strictEqual(first.decision, 'block');
-  assert.ok(first.reason.includes('reflection'));
-  assert.strictEqual(profileFile().counters.reflections, 1);
-  // Second stop in the same session -> no repeat.
-  const second = runHook('stop.ts', { session_id: SESSION, cwd: tmpDir });
-  assert.strictEqual(second, null, 'reflection is once per session');
+  // Stop no longer blocks the user — it queues a reflection for next time.
+  const stop = runHook('stop.ts', { session_id: SESSION, cwd: tmpDir });
+  assert.strictEqual(stop, null, 'Stop must not block the user at exit');
+  const afterStop = profileFile();
+  assert.strictEqual(afterStop.pending_reflection?.category, 'concurrency');
+  assert.strictEqual(afterStop.counters.reflections, 0, 'reflection has not happened yet');
+
+  // The next session surfaces it, non-blocking, and clears it.
+  const next = runHook('session-start.ts', { session_id: 'next-session', source: 'startup', cwd: tmpDir });
+  const ctx = next.hookSpecificOutput.additionalContext;
+  assert.ok(ctx.includes('<hone-reflection>'), 'next session surfaces the reflection');
+  assert.ok(ctx.includes('coached concurrency task'), 'reflection names the prior category');
+  const afterNext = profileFile();
+  assert.strictEqual(afterNext.pending_reflection ?? null, null, 'pending reflection cleared');
+  assert.strictEqual(afterNext.counters.reflections, 1, 'reflection counted when it is surfaced');
+
+  // A further session does not repeat it.
+  const third = runHook('session-start.ts', { session_id: 'third-session', source: 'startup', cwd: tmpDir });
+  assert.ok(
+    !(third?.hookSpecificOutput?.additionalContext ?? '').includes('<hone-reflection>'),
+    'reflection does not repeat once consumed',
+  );
 });
 
-test('F6 reflection never fires for an uncoached session', () => {
+test('F6 no reflection is queued for an uncoached session', () => {
   runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
   runHook('user-prompt-submit.ts', {
     session_id: SESSION, cwd: tmpDir, prompt: 'add a logout button to the navbar',
   });
   const stop = runHook('stop.ts', { session_id: SESSION, cwd: tmpDir });
-  assert.strictEqual(stop, null, 'no coached work -> no reflection');
+  assert.strictEqual(stop, null, 'no coached work -> nothing to reflect on');
+  assert.strictEqual(profileFile().pending_reflection ?? null, null, 'no reflection queued');
+});
+
+test('F6 staleness nudge: a skill decayed from disuse is surfaced at session start', () => {
+  // Seed a profile with a once-strong skill left idle for months.
+  const monthsAgo = new Date(Date.now() - 20 * 7 * 24 * 3600 * 1000).toISOString();
+  const profile = {
+    version: 2,
+    created_at: 'test',
+    counters: { eligible: 0, coached: 0, skipped: 0, gates_answered: 0, reflections: 0 },
+    categories: {},
+    skills: {
+      concurrency: { proficiency: 90, reps: 12, independent_reps: 12, assisted_reps: 0, last_updated: monthsAgo },
+    },
+    hint_history: [],
+  };
+  fs.writeFileSync(path.join(tmpDir, 'profile.json'), JSON.stringify(profile));
+  const start = runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
+  const ctx = start.hookSpecificOutput.additionalContext;
+  assert.ok(ctx.includes('concurrency'), 'the stale skill is named');
+  assert.ok(/gone quiet|drifting|self-quiz/.test(ctx), 'staleness nudge present');
 });
 
 test('F7 first skip is penalty-free (grace reserve); it unblocks but does not deskill', () => {

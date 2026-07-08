@@ -60,9 +60,12 @@ vanilla Claude Code, and nothing counts against the budget.
 - **Auto-feedback** — after code is written during a coached task, Hone gives a
   short senior-lens review (edge cases, failure modes, one thing to check) so
   you learn what to look for. It never silently rewrites your code.
-- **Reflection** — once per coached session, Hone asks for a quick recap ("what
-  was hardest? explain it back without looking"). On by default — reflection is
-  the consolidation step; set `reflection: optional` or `off` to soften it.
+- **Reflection** — after a coached session, Hone asks for a quick recap ("what
+  was hardest? explain it back without looking") — but at the *start of your next
+  session*, not by blocking you on the way out. A recall after a delay predicts
+  retention far better than one made on the spot, and the end of a session is the
+  worst moment to add friction. It's non-blocking (answer it or wave it off) and
+  on by default; set `reflection: optional` or `off` to soften it.
 - **Skill profile & adaptive coaching** — Hone keeps a per-category proficiency
   profile (see `/hone:status`) that moves as you work: up when you engage a gate
   at a low hint level, down when you skip or lean on full solutions. With
