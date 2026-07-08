@@ -5,7 +5,53 @@ All notable changes to Hone are documented here. This project follows
 
 ## [Unreleased]
 
+### Changed
+- **Reflection is now deferred to the next session, not blocked at Stop.** F6
+  used to `decision:block` the Stop hook to force a reflection at session exit —
+  the worst-timed, highest-friction moment (Eleftheriou et al., CHIWORK'26, flag
+  it as an abandonment risk), and an immediate self-judgment predicts retention
+  worse than a delayed one (Nelson & Dunlosky 1991, the delayed-JOL effect). A
+  coached session now *queues* a reflection that the next session surfaces
+  non-blocking, at the moment a short delayed recall does the most good. This
+  also fixes a real cadence bug: `reflection_done` was set once per session and
+  never reset (unlike `feedback_given`), so in a long session only the first
+  coached task ever got a reflection. It's kept embedded rather than an opt-in
+  link (which sees ~10% uptake — Kumar et al. 2024). **Product note:** this
+  removes the guaranteed same-session reflection; see the PR for the tradeoff.
+- **Skill-staleness nudge at session start.** A skill whose idle decay has pulled
+  it well below its peak gets one gentle "this has gone quiet" line — spaced
+  review at the point of impending forgetting is what the spacing effect rewards
+  (Cepeda et al. 2006, 317-experiment meta-analysis). Reuses the decay math
+  already on the profile; no new data captured.
+
 ### Fixed
+- **Classifier ignored a closing instruction after a leading question.** The
+  imperative/interrogative checks were `^`-anchored to the whole prompt, so
+  "why does this deadlock? just add a timeout for now" scored as pure learning
+  and opened the gate — even though the user had already decided. A decisive
+  closing clause ("just add X", "go ahead and Y") is now a strong execution
+  signal and cancels the "this is a question" bonus. On the held-out set this is
+  0% false-coach with ~92% recall.
+- **A rubber-stamp gate reply was credited as independent work.** `independent`
+  was computed purely from the configured hint level, and `markAnswered()`
+  accepted any next prompt — so at the shipped hint-0 default a one-word "ok"
+  recorded an independent rep and moved proficiency toward permanent graduation
+  (a proficiency-gaming hole; Baker et al. 2004; Neagu et al. 2026). The gate
+  still opens on any reply, but the skill-profile *write* now requires a
+  substantive answer (`isSubstantiveAnswer`); a terse but real approach still
+  counts.
+- **Graduation was a permanent badge (irreversible-graduation bug).** Idle
+  decay was capped at 15 points, exactly `100 − GRADUATE_PROFICIENCY(85)`, so a
+  category that ever hit proficiency 100 could never decay below the graduation
+  bar — `graduated()` stayed true forever, contradicting the code's own "so
+  graduation is reversible" comment. The decay cap is now 40, so even a
+  fully-mastered skill falls out of graduation after enough idle weeks (the
+  neutral-baseline floor still bounds it).
+- **`always_coach` was silently overridden by graduation.** `budget.decide()`
+  returned `graduated-independent` *before* it checked whether the category was
+  pinned to `always_coach`, so a category the user explicitly asked to always
+  coach (e.g. `security`) stopped gating the moment it graduated. The pin is now
+  checked first and outranks auto-graduation.
 - **`/hone:off` → `/hone:on` stale-gate hijack.** `setEnabled()` only ever
   wrote `state.json`; it never touched session state, so a Solution Gate left
   `pending` at the moment of `/hone:off` survived the round trip. The next
@@ -17,6 +63,60 @@ All notable changes to Hone are documented here. This project follows
   runtime toggle, so `/hone:on` always starts clean. This landed right on the
   exact self-help action (disable, then re-enable) a frustrated user is most
   likely to take.
+
+### Changed
+- **Proficiency now uses Bayesian Knowledge Tracing, not a flat ±6 nudge.** A
+  principled belief update (Corbett & Anderson 1994) with fixed guess/slip/
+  transit parameters — fixed rather than per-user-fit because per-category
+  events are far too sparse to fit (Pradhan et al. 2026). The working
+  probability is clamped off 0/1 before the Bayes step to avoid the absorbing
+  state at p=1 that would freeze a maxed skill (Beck & Chang 2007) — an assisted
+  rep now lowers proficiency even from 100.
+- **Grace-skip reserve.** The first couple of `/hone:skip` uses per category are
+  penalty-free — an occasional escape hatch isn't deskilling (Sharif & Shu 2017
+  on capped "emergency reserves"; Lally et al. 2010 on missed reps not derailing
+  habits). Past the reserve, a skip is an assisted signal as before.
+- **Held-out classifier eval + honest accuracy claim.** Added a 30-prompt
+  held-out set written after the signals were frozen and never used to tune
+  them; the README now cites its numbers (0% false-coach, ~92% recall) instead
+  of the iteratively-tuned in-repo sets.
+- **Cold-start guidance instead of hint-0 for unknown topics.** Minimal-guidance
+  coaching is the wrong default for a topic the user has never worked — worked
+  examples beat unguided problem-solving for novices (Kirschner, Sweller & Clark
+  2006; Kalyuga's expertise-reversal effect), and a 2026 CHIWORK RCT found a
+  "guided hints" condition produced the largest learning gains *and* the lowest
+  frustration of every condition tested. A category with no track record is now
+  floored at hint level 2 ("high-level ideas") for its first few coached tasks,
+  then relaxes to the user's dial. The floor only *raises* a lower setting; it
+  never overrides a higher one.
+- **Debugging is carved out both ways.** It is the skill most damaged by AI
+  assistance and the one where pure question-asking won (Shen & Tamkin 2026,
+  arXiv:2601.20245), so it keeps its hint-0 cold start (no floor), holds a lower
+  coaching ceiling (never past "high-level ideas"), and needs 12 reps to
+  graduate instead of 8. `/hone:skip` and `/hone:hint 5` still bypass coaching
+  entirely.
+- **Onboarding coaching-rate ramp.** A brand-new install no longer opens at the
+  full (default 100%) coaching rate — front-loaded friction is what gets a tool
+  uninstalled before it proves itself. The effective learning budget is capped
+  at 50% for a user's first ~5 eligible tasks, then the real budget takes over.
+  New `onboarding` setting (default `true`; set `false` to disable).
+- **Autonomy-supportive Solution Gate copy.** A hard PreToolUse deny is
+  need-thwarting, not merely unsupportive (Bartholomew et al. 2011), so the
+  gate and deny-reason copy now lead with a *rationale* ("putting your own
+  approach into words first is what keeps the skill yours"), drop the scolding
+  tone, and present `/hone:skip` as a first-class choice rather than a grudging
+  afterthought. Deci, Eghrari, Patrick & Leone (1994) found that pairing an
+  imposed task with a rationale, an acknowledgement of the friction, and
+  choice-framed language is what makes it get internalized instead of resented.
+  Behavior is unchanged — same gate, same ≤3 questions; only the framing moved.
+- **Coaching now consolidates before it critiques.** Productive failure only
+  pays off when the struggle is *resolved* with explicit consolidation; without
+  it, withholding is indistinguishable from spoon-feeding (Kapur's
+  "unproductive failure"; Sinha & Kapur 2021, *Review of Educational Research*,
+  d = 0.36). Both the post-gate coaching prompt and the auto-feedback review now
+  require a plain up-front verdict — *right / partially right / wrong*, naming
+  what is genuinely sound — before any critique. `skills/socratic-review`
+  rule 3 gets the same requirement.
 
 ### Added
 - **`/hone:budget <0-100>`** and **`/hone:reflection <off|optional|on>`** —

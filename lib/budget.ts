@@ -25,6 +25,12 @@ import type {
 } from './types.ts';
 import { adaptiveAdjustment, graduated } from './skills.ts';
 
+// Onboarding ramp: for a user's first few eligible learning tasks, the
+// effective budget is capped no higher than this, so a new install does not
+// open with maximum coaching friction (see decide()).
+const ONBOARDING_ELIGIBLE = 5;
+const ONBOARDING_BUDGET_CEILING = 50;
+
 export function decide(args: {
   classification: Classification;
   config: HoneConfig;
@@ -60,14 +66,26 @@ export function decide(args: {
   counters.eligible += 1;
   catStats.eligible += 1;
 
+  const pinned = always.includes(category);
+
   // F9 progressive independence: a graduated category (sustained high
-  // proficiency over enough reps) has earned the right to skip the gate.
-  // Still counted as eligible so the stats stay honest.
-  if (hone.progressive !== false && graduated(profile, category)) {
+  // proficiency over enough reps) has earned the right to skip the gate —
+  // UNLESS the user explicitly pinned it to always_coach, a deliberate choice
+  // that must outrank auto-graduation (a graduated `security` still gates if the
+  // user asked for that). Still counted as eligible so the stats stay honest.
+  if (!pinned && hone.progressive !== false && graduated(profile, category)) {
     return verdict(false, 'graduated-independent', classification);
   }
 
-  const budgetPct = normalizeBudget(hone.learning_budget);
+  let budgetPct = normalizeBudget(hone.learning_budget);
+  // Onboarding ramp: a brand-new user should not meet the full (default 100%)
+  // coaching rate on their very first learning tasks — front-loaded friction is
+  // what gets a tool uninstalled before it earns its keep. Cap the effective
+  // budget for the first few eligible tasks, then hand control back to the
+  // user's real budget. Opt out with `onboarding: false`.
+  if (hone.onboarding !== false && counters.eligible <= ONBOARDING_ELIGIBLE) {
+    budgetPct = Math.min(budgetPct, ONBOARDING_BUDGET_CEILING);
+  }
   // Integer arithmetic: (budgetPct/100)*eligible accumulates float error
   // (0.35*180 === 62.999…) and silently under-coaches at exact boundaries.
   const withinBudget = (counters.coached + 1) * 100 <= budgetPct * counters.eligible;
@@ -77,7 +95,6 @@ export function decide(args: {
   // neutral proficiency, so the exact-budget guarantee holds until real signal
   // accumulates.
   const adaptive = adaptiveAdjustment(profile, category, { adaptive: hone.adaptive !== false });
-  const pinned = always.includes(category);
   const coach = pinned || adaptive.pinCoach || withinBudget;
 
   if (coach) {

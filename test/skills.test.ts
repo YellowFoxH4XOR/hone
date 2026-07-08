@@ -2,15 +2,27 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import {
   recordOutcome,
+  recordSkip,
+  bktUpdate,
+  isSubstantiveAnswer,
   proficiencyOf,
+  staleSkills,
+  STALE_DROP,
   adaptiveAdjustment,
   effectiveHint,
+  coachingHint,
+  coldStartHintFloor,
   ensureSkill,
   decayedProficiency,
   graduated,
   BASELINE,
   GRADUATE_PROFICIENCY,
   GRADUATE_REPS,
+  DEBUG_GRADUATE_REPS,
+  COLD_START_REPS,
+  COLD_START_HINT_FLOOR,
+  DEBUG_HINT_CEILING,
+  GRACE_SKIP_RESERVE,
 } from '../lib/skills.ts';
 import type { Profile } from '../lib/types.ts';
 
@@ -47,7 +59,7 @@ test('F9: graduation requires BOTH high proficiency and enough reps', () => {
   assert.strictEqual(graduated(p, 'concurrency'), false, 'unseen category never graduates');
 });
 
-test('F9: proficiency decays toward baseline with disuse, capped, and reverses graduation', () => {
+test('F9: proficiency decays toward baseline with disuse, and stale mastery loses graduation', () => {
   const p = freshProfile();
   const tenWeeksAgo = new Date(Date.now() - 10 * 7 * 24 * 3600 * 1000).toISOString();
   p.skills['algorithms'] = {
@@ -56,16 +68,24 @@ test('F9: proficiency decays toward baseline with disuse, capped, and reverses g
   assert.strictEqual(decayedProficiency(p, 'algorithms'), 80); // -1/idle week
   assert.strictEqual(graduated(p, 'algorithms'), false, 'stale mastery re-enters coaching');
 
-  // Decay is capped: even a year idle never wipes the signal.
+  // Regression: a FULLY mastered skill (proficiency 100) must still lose
+  // graduation once it goes stale. The old DECAY_CAP of 15 floored a maxed
+  // skill at 100-15 = 85 == the graduation bar itself, so graduated() stayed
+  // true forever — a permanent badge. DECAY_CAP=40 lets it fall to 60.
   const yearAgo = new Date(Date.now() - 52 * 7 * 24 * 3600 * 1000).toISOString();
-  p.skills['algorithms']!.last_updated = yearAgo;
-  assert.strictEqual(decayedProficiency(p, 'algorithms'), 90 - 15);
+  p.skills['mastery'] = {
+    proficiency: 100, reps: 12, independent_reps: 12, assisted_reps: 0, last_updated: yearAgo,
+  };
+  assert.strictEqual(decayedProficiency(p, 'mastery'), 60); // 100 - DECAY_CAP(40)
+  assert.strictEqual(graduated(p, 'mastery'), false, 'a maxed skill still un-graduates when stale');
 
-  // Drifts toward baseline from below too, never crossing it.
+  // Decay never crosses baseline, from either side.
   p.skills['weakness'] = {
     proficiency: 44, reps: 3, independent_reps: 0, assisted_reps: 3, last_updated: yearAgo,
   };
   assert.strictEqual(decayedProficiency(p, 'weakness'), BASELINE);
+  p.skills['algorithms']!.last_updated = yearAgo;
+  assert.strictEqual(decayedProficiency(p, 'algorithms'), BASELINE); // 90 floored at neutral
 
   // Fresh activity -> no decay.
   p.skills['algorithms']!.last_updated = new Date().toISOString();
@@ -85,12 +105,64 @@ test('independent reps raise proficiency; assisted reps lower it', () => {
   assert.strictEqual(s.assisted_reps, 1);
 });
 
-test('proficiency clamps to [0,100] under long streaks', () => {
+test('BKT: independent streak saturates near mastery; assisted streak sinks; always in [0,100]', () => {
   const p = freshProfile();
   for (let i = 0; i < 100; i++) recordOutcome(p, 'security', { independent: true });
-  assert.strictEqual(proficiencyOf(p, 'security'), 100);
+  const high = proficiencyOf(p, 'security');
+  assert.ok(high >= 95 && high <= 100, `mastery should saturate high, got ${high}`);
   for (let i = 0; i < 100; i++) recordOutcome(p, 'security', { independent: false });
-  assert.strictEqual(proficiencyOf(p, 'security'), 0);
+  const low = proficiencyOf(p, 'security');
+  assert.ok(low >= 0 && low < BASELINE, `assisted streak should sink below neutral, got ${low}`);
+});
+
+test('BKT regression: an assisted outcome lowers even a maxed skill (no absorbing state at p=1)', () => {
+  // The degeneracy Beck & Chang (2007) warn about: without clamping the working
+  // probability off 1, P(known|incorrect) stays 1 and proficiency freezes at
+  // 100. With the clamp, an assisted rep must still pull it down.
+  assert.ok(bktUpdate(100, false) < 100, 'assisted must lower a maxed skill');
+  assert.ok(bktUpdate(0, true) > 0, 'independent must raise a floored skill');
+  assert.ok(bktUpdate(50, true) > 50, 'independent raises from neutral');
+  assert.ok(bktUpdate(50, false) < 50, 'assisted lowers from neutral');
+  // Assisted lowers from any non-floored state; independent raises from any
+  // non-saturated state. (At the extreme floor/ceiling the learning-transit
+  // term dominates — expected BKT behavior — but never out of [0,100].)
+  for (const start of [30, 50, 70, 90, 100]) {
+    assert.ok(bktUpdate(start, false) < start, `assisted should lower from ${start}`);
+  }
+  for (const start of [0, 10, 30, 50, 70]) {
+    assert.ok(bktUpdate(start, true) > start, `independent should raise from ${start}`);
+  }
+  for (const start of [0, 50, 100]) {
+    assert.ok(bktUpdate(start, true) <= 100 && bktUpdate(start, false) >= 0, 'stays in [0,100]');
+  }
+});
+
+test('rubber-stamp gate replies are not substantive; real approaches (even terse) are', () => {
+  for (const rubber of ['ok', 'okay', 'sure', 'yes', 'you decide', 'idk', 'just do it', 'lgtm', 'whatever']) {
+    assert.strictEqual(isSubstantiveAnswer(rubber), false, `"${rubber}" is a rubber stamp`);
+  }
+  for (const real of ['use a mutex', 'row-level locking, i think', 'ok but let us use a queue for backpressure']) {
+    assert.strictEqual(isSubstantiveAnswer(real), true, `"${real}" is a real approach`);
+  }
+  assert.strictEqual(isSubstantiveAnswer(''), false);
+  assert.strictEqual(isSubstantiveAnswer(null), false);
+});
+
+test('grace-skip: the first skips in a category are penalty-free, then skips count as assisted', () => {
+  const p = freshProfile();
+  for (let i = 0; i < GRACE_SKIP_RESERVE; i++) {
+    const { penalized } = recordSkip(p, 'concurrency');
+    assert.strictEqual(penalized, false, `skip ${i + 1} should be within the grace reserve`);
+  }
+  // Reserve spent, no proficiency movement, no assisted rep yet.
+  assert.strictEqual(proficiencyOf(p, 'concurrency'), BASELINE);
+  assert.strictEqual(p.skills['concurrency']?.assisted_reps, 0);
+  assert.strictEqual(p.skills['concurrency']?.grace_skips_used, GRACE_SKIP_RESERVE);
+  // The next skip is penalized.
+  const beyond = recordSkip(p, 'concurrency');
+  assert.strictEqual(beyond.penalized, true);
+  assert.strictEqual(p.skills['concurrency']?.assisted_reps, 1);
+  assert.ok(proficiencyOf(p, 'concurrency') < BASELINE, 'a skip past the reserve lowers proficiency');
 });
 
 test('adaptive is a no-op at neutral proficiency (preserves exact-budget guarantee)', () => {
@@ -130,6 +202,74 @@ test('effectiveHint clamps so adaptivity never reaches vanilla (5) or below 0', 
   assert.strictEqual(effectiveHint(4, 1), 4); // never bumps a coached task to 5
   assert.strictEqual(effectiveHint(1, -1), 0);
   assert.strictEqual(effectiveHint(3, 1), 4);
+});
+
+test('cold-start floors a not-yet-known category at guided help, but never debugging', () => {
+  const p = freshProfile();
+  // No reps in architecture -> floored at guided help.
+  assert.strictEqual(coldStartHintFloor(p, 'architecture'), COLD_START_HINT_FLOOR);
+  // Debugging is exempt -> no floor, keeps its hint-0 cold start.
+  assert.strictEqual(coldStartHintFloor(p, 'debugging'), 0);
+  // Once a track record exists the floor lifts.
+  p.skills['architecture'] = {
+    proficiency: 50, reps: COLD_START_REPS, independent_reps: 1, assisted_reps: 2, last_updated: null,
+  };
+  assert.strictEqual(coldStartHintFloor(p, 'architecture'), 0);
+});
+
+test('coachingHint: floor raises a cold-start category; ceiling caps debugging; floor never lowers', () => {
+  const p = freshProfile();
+  // New architecture task at base hint 0 -> floored up to guided help.
+  assert.strictEqual(coachingHint(p, 'architecture', 0, 0), COLD_START_HINT_FLOOR);
+  // A user who set a higher hint keeps it — the floor only raises.
+  assert.strictEqual(coachingHint(p, 'architecture', 3, 0), 3);
+  // Debugging: no cold-start floor, and capped at its ceiling even when pushed.
+  assert.strictEqual(coachingHint(p, 'debugging', 0, 0), 0);
+  assert.strictEqual(coachingHint(p, 'debugging', 4, 1), DEBUG_HINT_CEILING);
+  // An established category behaves like plain effectiveHint again.
+  p.skills['performance'] = {
+    proficiency: 50, reps: 5, independent_reps: 3, assisted_reps: 2, last_updated: null,
+  };
+  assert.strictEqual(coachingHint(p, 'performance', 0, 0), 0);
+});
+
+test('F9: debugging earns independence more slowly than other skills', () => {
+  const p = freshProfile();
+  const fresh = new Date().toISOString();
+  // The normal reps count graduates a normal skill...
+  p.skills['algorithms'] = {
+    proficiency: 90, reps: GRADUATE_REPS, independent_reps: 8, assisted_reps: 0, last_updated: fresh,
+  };
+  assert.strictEqual(graduated(p, 'algorithms'), true);
+  // ...but the same count is not enough for debugging.
+  p.skills['debugging'] = {
+    proficiency: 90, reps: GRADUATE_REPS, independent_reps: 8, assisted_reps: 0, last_updated: fresh,
+  };
+  assert.strictEqual(graduated(p, 'debugging'), false, 'debugging needs more reps');
+  p.skills['debugging']!.reps = DEBUG_GRADUATE_REPS;
+  assert.strictEqual(graduated(p, 'debugging'), true);
+});
+
+test('staleSkills surfaces only skills that decayed past the threshold, most-stale first', () => {
+  const p = freshProfile();
+  const monthsAgo = new Date(Date.now() - 20 * 7 * 24 * 3600 * 1000).toISOString();
+  const fresh = new Date().toISOString();
+  // Idle & strong -> decays well past the threshold.
+  p.skills['concurrency'] = { proficiency: 90, reps: 12, independent_reps: 12, assisted_reps: 0, last_updated: monthsAgo };
+  // Idle a little less far -> smaller drop, but still over the threshold.
+  const weeksAgo = new Date(Date.now() - 12 * 7 * 24 * 3600 * 1000).toISOString();
+  p.skills['security'] = { proficiency: 80, reps: 10, independent_reps: 10, assisted_reps: 0, last_updated: weeksAgo };
+  // Recently active -> not stale.
+  p.skills['debugging'] = { proficiency: 88, reps: 12, independent_reps: 12, assisted_reps: 0, last_updated: fresh };
+  // Never recorded (no last_updated) -> never stale.
+  p.skills['performance'] = { proficiency: 70, reps: 2, independent_reps: 2, assisted_reps: 0, last_updated: null };
+
+  const stale = staleSkills(p);
+  const names = stale.map((s) => s.category);
+  assert.ok(names.includes('concurrency') && names.includes('security'));
+  assert.ok(!names.includes('debugging') && !names.includes('performance'));
+  assert.strictEqual(stale[0]!.category, 'concurrency', 'most-stale first');
+  assert.ok(stale.every((s) => s.raw - s.decayed >= STALE_DROP));
 });
 
 test('ensureSkill self-heals a corrupt/hand-edited skill entry', () => {

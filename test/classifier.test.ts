@@ -18,6 +18,9 @@ function loadFixture(name: string): LabeledPrompt[] {
 const fixtures = loadFixture('labeled-prompts.json');
 const oosFixtures = loadFixture('labeled-prompts-oos.json');
 const r2Fixtures = loadFixture('labeled-prompts-r2.json');
+// Written AFTER the signal lists were frozen and never used to tune them — this
+// is the one dataset that honestly measures generalization to unseen phrasing.
+const holdoutFixtures = loadFixture('labeled-prompts-holdout.json');
 
 test('PRD acceptance: execution -> learning misclassification stays under 5%', () => {
   const execution = fixtures.filter((p) => p.expected === 'execution');
@@ -59,6 +62,47 @@ test('third dataset (mobile/devops + data/ML personas): false-coach <5%, recall 
     1 - missed.length / learn.length >= 0.9,
     `recall ${(100 * (1 - missed.length / learn.length)).toFixed(1)}%:\n` +
       missed.map((p) => `  - ${p.prompt}`).join('\n'),
+  );
+});
+
+test('HELD-OUT set (never used to tune signals): 0 false-coach, recall stays useful', () => {
+  const exec = holdoutFixtures.filter((p) => p.expected === 'execution');
+  const learn = holdoutFixtures.filter((p) => p.expected === 'learning');
+  const fc = exec.filter((p) => classify(p.prompt).intent === 'learning');
+  const missed = learn.filter((p) => classify(p.prompt).intent !== 'learning');
+  const recall = 1 - missed.length / learn.length;
+  // The PRD's asymmetric contract: execution->coaching (the annoying direction)
+  // must stay under 5%. On this unseen set it is currently exactly 0.
+  assert.ok(
+    fc.length / exec.length < 0.05,
+    `held-out false-coach ${fc.length}/${exec.length}:\n` + fc.map((p) => `  - ${p.prompt}`).join('\n'),
+  );
+  // Recall floor is deliberately honest (not the 90%+ we tune the seen sets to)
+  // — this measures generalization, so we assert the product is still viable
+  // (>=85%), not perfection. Real current recall prints on failure.
+  assert.ok(
+    recall >= 0.85,
+    `held-out recall ${(recall * 100).toFixed(1)}%; missed:\n` + missed.map((p) => `  - ${p.prompt}`).join('\n'),
+  );
+});
+
+test('closing-clause override: a question that ends in an explicit instruction routes to execution', () => {
+  // The user already decided — no Solution Gate. Before the fix, the leading
+  // "why/how/what" made these read as pure learning (the imperative was at the
+  // END, past the ^-anchored check).
+  const cases = [
+    'why does this deadlock under load? just add a timeout and retry for now.',
+    'how should tokens be stored for this? go ahead and put them in an httpOnly cookie.',
+    "what's the cleanest way to structure this — actually never mind, just extract it into a helper.",
+    "not sure why the query is slow but let's just add an index on user_id and move on",
+  ];
+  for (const prompt of cases) {
+    assert.strictEqual(classify(prompt).intent, 'execution', `should route to execution: ${prompt}`);
+  }
+  // ...but a genuine question without a closing instruction still coaches.
+  assert.strictEqual(
+    classify('why does this deadlock under load? I cannot figure out the root cause').intent,
+    'learning',
   );
 });
 

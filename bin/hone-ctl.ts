@@ -211,17 +211,22 @@ function skip(args: string[]): number {
       profile.counters = { eligible: 0, coached: 0, skipped: 0, gates_answered: 0, reflections: 0 };
     }
     profile.counters.skipped = (profile.counters.skipped || 0) + 1;
-    // F7: skipping coaching is an "assisted" signal — the user wanted the
-    // answer, not to work it — so it nudges proficiency down for that area.
+    // F7: skipping coaching is an "assisted" signal — but a small per-category
+    // grace reserve of penalty-free skips comes first, so an occasional escape
+    // hatch doesn't read as deskilling. Past the reserve, a skip nudges
+    // proficiency down for that area.
+    let graced = false;
     if (skippedCategory) {
-      skills.recordOutcome(profile, skippedCategory, {
-        independent: false,
+      const { penalized } = skills.recordSkip(profile, skippedCategory, {
         at: new Date().toISOString(),
       });
+      graced = !penalized;
     }
     state.saveProfile(profile);
     console.log(
-      'Solution Gate skipped for this task — Claude will implement directly. (Skips are tracked in /hone:status.)',
+      'Solution Gate skipped for this task — Claude will implement directly.' +
+        (graced ? ' (Grace skip — no proficiency penalty.)' : '') +
+        ' (Skips are tracked in /hone:status.)',
     );
   } else {
     console.log('No gate was pending; nothing to skip.');
