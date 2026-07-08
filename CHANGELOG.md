@@ -3,7 +3,10 @@
 All notable changes to Hone are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.6.0] — 2026-07-08
+
+Hone goes cross-platform: the same behavioral layer now runs on OpenCode as well
+as Claude Code, sharing one skill profile across both tools.
 
 ### Added
 - **OpenCode support.** Hone now runs on [OpenCode](https://opencode.ai) as well
