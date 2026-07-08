@@ -33,6 +33,9 @@ export interface SessionState {
   // F5: auto-feedback fires at most once per coached task; reset when a new
   // gate opens.
   feedback_given?: boolean;
+  // OpenCode adapter: first-message-of-session marker (Claude Code gets this
+  // for free from the SessionStart hook; OpenCode folds it into chat.message).
+  started?: boolean;
   // F10: interview mode — every prompt becomes interviewer-style questioning
   // and file edits are blocked until `/hone:interview stop`.
   interview_mode?: boolean;

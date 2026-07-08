@@ -3,6 +3,22 @@
 All notable changes to Hone are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **OpenCode support.** Hone now runs on [OpenCode](https://opencode.ai) as well
+  as Claude Code, with the same behavior. The entire `lib/` core is shared; a
+  thin adapter (`opencode/plugin/hone.ts`) maps OpenCode's plugin API to it:
+  `chat.message` (intent route + Solution Gate + coaching injection),
+  `tool.execute.before` (block edits while gated, via `throw`),
+  `tool.execute.after` (auto-feedback), and `event: session.idle` (queue the
+  deferred reflection). `/hone-*` command files and an install guide
+  (`docs/OPENCODE.md`) are included; state is shared with the Claude Code build
+  (`~/.claude/hone/`), so one skill profile follows you across both tools.
+- Shared `lib/bashwrite.ts` (extracted from the Claude Code PreToolUse hook) so
+  both platforms use one definition of "does this shell command write files."
+- `hone-ctl` is now exposed as a `bin` entry for the OpenCode command files.
+
 ## [0.5.0] — 2026-07-08
 
 Research-backed calibration — a learning-science, arXiv, and product review turned
