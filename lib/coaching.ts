@@ -37,17 +37,25 @@ export function hintRule(level: number): HintRule {
 
 // Injected when the Solution Gate opens: Claude must elicit the user's
 // approach before any implementation.
+//
+// Framing is autonomy-supportive on purpose: a hard gate is need-thwarting
+// (Bartholomew et al. 2011), so the copy leads with a RATIONALE, acknowledges
+// the friction, and treats /hone:skip as a genuine choice rather than a
+// grudging escape hatch. Deci, Eghrari, Patrick & Leone (1994) found exactly
+// that combination — rationale + acknowledgement + choice-framing — is what
+// makes an imposed task get internalized instead of resented.
 export function gateContext(opts: { category: string; hintLevel: number }): string {
   const hint = hintRule(opts.hintLevel);
   return [
     '<hone-coaching>',
     `Hone: this request is a coached learning task (category: ${opts.category}). The Solution Gate is ACTIVE.`,
     'For THIS reply only:',
-    '1. Do not write, edit, or generate any code, pseudocode, or file changes — file-editing tools are blocked until the user responds.',
-    '2. Ask the user for their proposed approach first: at most 3 short, targeted questions probing the decisions that actually matter for this task (invariants, failure modes, tradeoffs). Fewer is better.',
-    '3. Tone: a sharp senior peer thinking alongside them — not a quiz or a lecture. One short sentence of setup at most.',
-    `4. After they answer, you will coach at hint level ${opts.hintLevel} (${hint.name}).`,
-    'If the user would rather skip coaching for this task, they can run /hone:skip; if Hone misclassified this (it is not really a learning task), /hone:wrong records it and unblocks. Mention these once, briefly, at the end.',
+    '1. Lead with one plain sentence on why the pause is worth it: putting your own approach into words first is what keeps the skill yours — a deliberate ~30-second trade, not a hoop to clear.',
+    '2. Do not write, edit, or generate any code, pseudocode, or file changes yet — file-editing tools are blocked until the user responds.',
+    '3. Ask for their proposed approach: at most 3 short, targeted questions probing the decisions that actually matter for this task (invariants, failure modes, tradeoffs). Fewer is better.',
+    '4. Tone: a sharp senior peer thinking alongside them — never a quiz, a lecture, or a scold, and never imply they are cutting corners.',
+    `5. After they answer, you will coach at hint level ${opts.hintLevel} (${hint.name}).`,
+    'Genuinely their call: if they would rather just get the code this time, /hone:skip is a first-class option and not a failure; if Hone misclassified this (it is not really a learning task), /hone:wrong records it and unblocks. Offer both plainly, not as a grudging afterthought.',
     '</hone-coaching>',
   ].join('\n');
 }
@@ -80,7 +88,8 @@ export function coachingContext(opts: {
     `Hone: the user just responded to the Solution Gate for a coached ${opts.category} task. Gate is now open.`,
     `Hint level ${opts.hintLevel} (${hint.name}): ${hint.rule}`,
     'Coach like a senior peer reviewing their thinking:',
-    '- Briefly assess their approach: what is sound, what is risky, what they have not considered (edge cases, failure modes, concurrency, cost).',
+    '- FIRST, give a plain verdict on their approach: is it right, partially right, or heading wrong? Name what is genuinely sound before anything else. Lead with this consolidation — a critique that never says whether they were right just reads as more withholding, and the struggle only pays off once it is resolved.',
+    '- THEN: what is risky or what they have not considered (edge cases, failure modes, concurrency, cost).',
     '- At most 3 Socratic questions per turn, and only where a question sharpens their thinking more than a statement would.',
   ];
   if (opts.reviewOnly !== false) {
@@ -99,8 +108,8 @@ export function gateDenyReason(session: { category?: string | null } | null | un
   const category = session?.category || 'learning';
   return (
     `Hone Solution Gate: this is a coached ${category} task and the user has not shared their approach yet. ` +
-    'Do not modify files. Instead, ask the user (max 3 short questions) how they would approach it, then wait. ' +
-    "The user can bypass with /hone:skip — skipping is the USER's decision only; never invoke it or run hone-ctl yourself."
+    'Rather than edit files, ask the user (max 3 short questions) how they would approach it, then wait — putting their own approach into words first is the point of the pause, not a formality. ' +
+    "If they would rather just get the code this time, /hone:skip is theirs to run and a first-class choice — skipping is the USER's decision only; never invoke it or run hone-ctl yourself."
   );
 }
 
@@ -110,8 +119,8 @@ export function autoFeedbackContext(opts: { category: string; reviewOnly: boolea
   const lines = [
     '<hone-coaching>',
     `Hone: code was just written during a coached ${opts.category} task. Before moving on, give the user a brief senior-lens review so they learn what to look for:`,
-    '- 2-4 lines, not a rewrite: name the edge cases, failure modes, or assumptions worth a second look here specifically.',
-    '- Frame it as "here is what I would check", not "here is what is wrong".',
+    '- OPEN with a plain one-line verdict: does this look correct as written, correct-but-watch-X, or likely wrong because Y? Say it directly — a review that never lands a verdict leaves the struggle unresolved (Kapur\'s "unproductive failure"), no better than being handed the answer.',
+    '- Then 2-4 lines, not a rewrite: name the edge cases, failure modes, or assumptions worth a second look here specifically. For those specifics, frame as "here is what I would check", not a verdict on each.',
     '- End with one question that makes them pressure-test the code themselves.',
   ];
   if (opts.reviewOnly) {
@@ -121,19 +130,34 @@ export function autoFeedbackContext(opts: { category: string; reviewOnly: boolea
   return lines.join('\n');
 }
 
-// F6 reflection: the Stop-hook block reason. Making Claude ask the user to
-// recap consolidates the learning; it fires at most once per coached session.
-export function reflectionPrompt(opts: { category: string }): string {
+// F6 reflection, DEFERRED. Surfaced (non-blocking) at the START of the session
+// after a coached one, rather than by blocking at exit. A judgment made after a
+// delay predicts real retention far better than one made immediately (Nelson &
+// Dunlosky 1991, the delayed-JOL effect), and asking as the user is trying to
+// leave is the worst-timed, highest-friction moment there is (Eleftheriou et
+// al., CHIWORK'26, flag it as an abandonment risk). Kept embedded-but-gentle
+// rather than an opt-in link, which sees ~10% uptake (Kumar et al. 2024).
+export function deferredReflectionContext(opts: { category: string }): string {
   return [
     '<hone-reflection>',
-    `Hone: a coached ${opts.category} task just wrapped. Before ending, ask a brief reflection to consolidate the learning:`,
-    'Ask the user, warmly and briefly, 1-2 of these — whichever fit what they just did:',
-    '- What was the hardest part, and what finally made it click?',
-    '- What would you do differently if you hit this again?',
-    '- In one or two sentences, explain the solution back without looking.',
-    'Keep it to a couple of sentences of framing.',
+    `Hone: last session included a coached ${opts.category} task. Before diving into new work, warmly and briefly invite the user to recall it — a short delayed recall is where the learning consolidates:`,
+    'Ask 1 of these, whichever fits what they did:',
+    '- What was the trickiest part, and what finally made it click?',
+    '- What would you do differently if you hit it again?',
+    '- In a sentence or two, explain the solution back without looking.',
+    'One or two sentences of framing, then let them answer or wave it off — never block their actual request on it.',
     '</hone-reflection>',
   ].join('\n');
+}
+
+// A gentle spacing nudge for the session-start line: a skill the user built has
+// drifted from disuse and is worth a light touch before it fades (Cepeda et al.
+// 2006). One line, never blocking.
+export function stalenessNudge(opts: { category: string }): string {
+  return (
+    `Heads up: your ${opts.category} skill has gone quiet and is drifting from disuse. ` +
+    "If today's work touches it, that's a good place to stay hands-on; if not, a quick self-quiz keeps it sharp."
+  );
 }
 
 // SessionStart: one terse line of standing context so Claude knows Hone

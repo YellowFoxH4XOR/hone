@@ -169,17 +169,54 @@ test('disabled and hint level 5 short-circuit to vanilla', () => {
   assert.strictEqual(profile.counters.eligible, 0);
 });
 
-test('budget 0 never coaches unpinned; budget 100 always coaches', () => {
+test('budget 0 never coaches unpinned; budget 100 always coaches (onboarding off)', () => {
   const zero = freshProfile();
   const cfgZero = config({ learning_budget: 0, categories: { always_coach: [], never_coach: [] } });
   for (let i = 0; i < 50; i++) {
     assert.strictEqual(decide({ classification: learningTask(), config: cfgZero, profile: zero }).coach, false);
   }
+  // onboarding:false so the ramp doesn't soften the first few (see next test).
   const hundred = freshProfile();
-  const cfgAll = config({ learning_budget: 100, categories: { always_coach: [], never_coach: [] } });
+  const cfgAll = config({ learning_budget: 100, onboarding: false, categories: { always_coach: [], never_coach: [] } });
   for (let i = 0; i < 50; i++) {
     assert.strictEqual(decide({ classification: learningTask(), config: cfgAll, profile: hundred }).coach, true);
   }
+});
+
+test('onboarding ramp: a new user is not coached at the full 100% rate on the first eligible tasks', () => {
+  const profile = freshProfile();
+  const cfg = config({ learning_budget: 100, categories: { always_coach: [], never_coach: [] } });
+  const fired: number[] = [];
+  for (let i = 1; i <= 8; i++) {
+    if (decide({ classification: learningTask(), config: cfg, profile }).coach) fired.push(i);
+  }
+  // First 5 eligible are capped at 50% (fires on the 2nd, 4th); from the 6th the
+  // user's real 100% budget takes over and every task coaches.
+  assert.deepStrictEqual(fired, [2, 4, 6, 7, 8]);
+});
+
+test('onboarding ramp respects a budget already below the ceiling and can be disabled', () => {
+  // A 20% budget is already under the 50% onboarding ceiling — ramp is a no-op.
+  const ramped = freshProfile();
+  const cfg20 = config({ learning_budget: 20, categories: { always_coach: [], never_coach: [] } });
+  const fired: number[] = [];
+  for (let i = 1; i <= 15; i++) {
+    if (decide({ classification: learningTask(), config: cfg20, profile: ramped }).coach) fired.push(i);
+  }
+  assert.deepStrictEqual(fired, [5, 10, 15]);
+});
+
+test('always_coach outranks graduation: a pinned category still coaches after it graduates', () => {
+  const profile = freshProfile();
+  // security is in the DEFAULT always_coach list, and here it is also graduated.
+  profile.skills['security'] = {
+    proficiency: 95, reps: 12, independent_reps: 12, assisted_reps: 0,
+    last_updated: new Date().toISOString(),
+  };
+  const cfg = config({ learning_budget: 100 }); // default always_coach includes security
+  const result = decide({ classification: learningTask('security'), config: cfg, profile });
+  assert.strictEqual(result.coach, true, 'pinned beats auto-graduation');
+  assert.strictEqual(result.reason, 'always-coach-category');
 });
 
 test('malformed budget values fall back to the shipped default (100) and clamp to [0,100]', () => {

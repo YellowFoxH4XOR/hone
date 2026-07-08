@@ -1,6 +1,6 @@
 {
   "name": "hone-claude-plugin",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Hone — a Claude Code plugin that makes developers better engineers, not just faster ones. Intent routing, learning budget, solution gate, hint levels, Socratic reviews.",
   "type": "module",

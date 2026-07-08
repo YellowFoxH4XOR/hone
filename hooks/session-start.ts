@@ -6,6 +6,7 @@ import { emit, run } from '../lib/hook-io.ts';
 import * as state from '../lib/state.ts';
 import * as configLib from '../lib/config.ts';
 import * as coaching from '../lib/coaching.ts';
+import * as skills from '../lib/skills.ts';
 
 run(async (input) => {
   state.ensureDirs();
@@ -34,6 +35,29 @@ run(async (input) => {
   if (errors.length > 0) {
     text += `\nHone config warning (defaults are active — mention this to the user once): ${errors.join('; ')}`;
   }
+
+  // F6 deferred reflection: if the last coached session queued one, surface it
+  // here (non-blocking) and clear it. This is when the reflection actually
+  // happens, so the counter increments here, not at Stop.
+  let profileDirty = false;
+  const pending = profile.pending_reflection;
+  if (config.hone.reflection !== 'off' && pending && pending.category) {
+    text += '\n' + coaching.deferredReflectionContext({ category: pending.category });
+    profile.pending_reflection = null;
+    if (!profile.counters) {
+      profile.counters = { eligible: 0, coached: 0, skipped: 0, gates_answered: 0, reflections: 0 };
+    }
+    profile.counters.reflections = (profile.counters.reflections || 0) + 1;
+    profileDirty = true;
+  }
+
+  // Spacing nudge: surface at most the single most-stale skill, if any.
+  const stale = skills.staleSkills(profile);
+  if (stale.length > 0) {
+    text += '\n' + coaching.stalenessNudge({ category: stale[0]!.category });
+  }
+
+  if (profileDirty) state.saveProfile(profile);
 
   emit({
     hookSpecificOutput: {
