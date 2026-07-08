@@ -155,7 +155,7 @@ export function sessionStartContext(opts: {
     '<hone-status>',
     `Hone is active (learning budget ${opts.budget}%, hint level ${opts.hintLevel}, ${ratio}). ` +
       'Most requests pass through untouched. When a turn includes <hone-coaching> instructions, follow them exactly. ' +
-      'Commands: /hone:status, /hone:hint N, /hone:skip, /hone:wrong, /hone:interview, /hone:dashboard, /hone:off.',
+      'Commands: /hone:status, /hone:hint N, /hone:budget N, /hone:reflection off|optional|on, /hone:skip, /hone:wrong, /hone:interview, /hone:dashboard, /hone:off.',
     '</hone-status>',
   ].join('\n');
 }

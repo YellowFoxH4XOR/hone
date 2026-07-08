@@ -56,3 +56,31 @@ test('isBlocking and describe tolerate null/garbage sessions', () => {
   assert.strictEqual(gate.describe(null), 'idle');
   assert.strictEqual(gate.describe({ gate: 'garbage' }), 'idle');
 });
+
+// Regression: the /hone:off -> /hone:on stale-gate hijack. reset() is what
+// setEnabled(false) calls to make sure a still-open gate never survives to
+// silently swallow the next, unrelated prompt after /hone:on.
+test('reset() clears a pending gate to idle (not skipped) and reports it was blocking', () => {
+  const s = defaultSession();
+  gate.open(s, { category: 'security', prompt: 'how should we store refresh tokens' });
+  assert.strictEqual(gate.isBlocking(s), true);
+
+  assert.strictEqual(gate.reset(s), true);
+  assert.strictEqual(s.gate, 'idle');
+  assert.strictEqual(s.category, null);
+  assert.strictEqual(s.task_preview, null);
+  assert.strictEqual(s.opened_at, null);
+  assert.strictEqual(gate.isBlocking(s), false);
+});
+
+test('reset() on a non-pending gate is a no-op signal (still resets to idle, but reports false)', () => {
+  const idle = defaultSession();
+  assert.strictEqual(gate.reset(idle), false);
+  assert.strictEqual(idle.gate, 'idle');
+
+  const answered = defaultSession();
+  gate.open(answered, { category: 'debugging', prompt: 'x' });
+  gate.markAnswered(answered);
+  assert.strictEqual(gate.reset(answered), false);
+  assert.strictEqual(answered.gate, 'idle');
+});

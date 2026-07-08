@@ -25,6 +25,10 @@ function main(argv: string[]): number {
       return setEnabled(false);
     case 'hint':
       return setHint(args[0]);
+    case 'budget':
+      return setBudget(args[0]);
+    case 'reflection':
+      return setReflection(args[0]);
     case 'skip':
       return skip(args);
     case 'wrong':
@@ -34,7 +38,9 @@ function main(argv: string[]): number {
     case 'dashboard':
       return dashboard(args);
     default:
-      console.log('usage: hone-ctl <status|on|off|hint N|skip|wrong|interview [topic|stop]|dashboard [stop]>');
+      console.log(
+        'usage: hone-ctl <status|on|off|hint N|budget N|reflection off|optional|on|skip|wrong|interview [topic|stop]|dashboard [stop]>',
+      );
       return 1;
   }
 }
@@ -57,6 +63,7 @@ function status(): number {
   lines.push(
     `Learning budget: ${hone.learning_budget}% — coached ${counters.coached}/${counters.eligible} eligible learning tasks`,
   );
+  lines.push(`Reflection: ${hone.reflection}`);
   lines.push(
     `Gates answered: ${counters.gates_answered} · skipped: ${counters.skipped} · reflections: ${counters.reflections ?? 0}` +
       ((counters.corrections ?? 0) > 0 ? ` · corrections: ${counters.corrections}` : '') +
@@ -111,8 +118,23 @@ function setEnabled(enabled: boolean): number {
   const runtime = state.loadRuntimeState();
   runtime.enabled = enabled;
   state.saveRuntimeState(runtime);
+
+  // Bug fix: turning off must not leave a `pending` gate lying around. If it
+  // did, the next prompt after /hone:on — however unrelated — would silently
+  // get treated as "the answer" to that stale gate (see gateLib.reset()).
+  let clearedGate = false;
+  if (!enabled) {
+    const sessionId = state.currentSessionId();
+    if (sessionId) {
+      const session = state.loadSession(sessionId);
+      clearedGate = gateLib.reset(session);
+      if (clearedGate) state.saveSession(sessionId, session);
+    }
+  }
+
   console.log(
-    `Hone is now ${enabled ? 'ON' : 'OFF'}${enabled ? '' : ' (re-enable any time with /hone:on)'}.`,
+    `Hone is now ${enabled ? 'ON' : 'OFF'}${enabled ? '' : ' (re-enable any time with /hone:on)'}.` +
+      (clearedGate ? ' Pending Solution Gate for this session cleared.' : ''),
   );
   return 0;
 }
@@ -136,6 +158,38 @@ function setHint(value: string | undefined): number {
   state.saveProfile(profile);
 
   console.log(`Hint level set to ${n} (${coaching.hintRule(n).name}).`);
+  return 0;
+}
+
+// /hone:budget — in-chat de-escalation lever. Previously the only way to
+// change the % of eligible learning tasks that get coached was hand-editing
+// config.yaml; this mirrors setHint()'s runtime-override pattern so it takes
+// effect immediately, same session, no file to find.
+function setBudget(value: string | undefined): number {
+  const n = parseInt(value ?? '', 10);
+  if (!Number.isInteger(n) || n < 0 || n > 100) {
+    console.log('usage: hone-ctl budget <0-100>  (% of eligible learning tasks that get coached)');
+    return 1;
+  }
+  const runtime = state.loadRuntimeState();
+  runtime.learning_budget = n;
+  state.saveRuntimeState(runtime);
+  console.log(`Learning budget set to ${n}%.`);
+  return 0;
+}
+
+// /hone:reflection — in-chat de-escalation lever for the once-per-session
+// recap (F6). Same runtime-override pattern as hint/budget.
+function setReflection(value: string | undefined): number {
+  const v = (value ?? '').trim().toLowerCase();
+  if (v !== 'off' && v !== 'optional' && v !== 'on') {
+    console.log('usage: hone-ctl reflection <off|optional|on>');
+    return 1;
+  }
+  const runtime = state.loadRuntimeState();
+  runtime.reflection = v;
+  state.saveRuntimeState(runtime);
+  console.log(`Reflection set to ${v}.`);
   return 0;
 }
 

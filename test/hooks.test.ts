@@ -257,6 +257,45 @@ test('/hone:off disables everything; /hone:on and hint changes apply', () => {
   assert.ok(status.includes('Hint level: 3'));
 });
 
+// Regression: the /hone:off -> /hone:on stale-gate hijack. Before the fix,
+// setEnabled() only wrote state.json and never touched session state, so a
+// gate left `pending` at the moment of /hone:off survived the round trip and
+// silently ate the next, wholly unrelated prompt after /hone:on as if it were
+// "the answer" to the old gate.
+test('/hone:off clears a pending gate so /hone:on does not hijack the next unrelated prompt', () => {
+  runHook('session-start.ts', { session_id: SESSION, source: 'startup', cwd: tmpDir });
+
+  // Open a gate on a concurrency task.
+  runHook('user-prompt-submit.ts', {
+    session_id: SESSION, cwd: tmpDir,
+    prompt: 'we keep hitting a race condition when two workers claim the same job',
+  });
+  assert.strictEqual(sessionFile().gate, 'pending');
+  assert.strictEqual(sessionFile().category, 'concurrency');
+
+  // Disable while the gate is still pending, then re-enable.
+  const offOut = runCtl(['off']);
+  assert.ok(offOut.includes('cleared'), 'off must report the stale gate was cleared');
+  assert.strictEqual(sessionFile().gate, 'idle', 'off must reset the pending gate, not leave it dangling');
+  assert.strictEqual(sessionFile().category, null);
+  runCtl(['on']);
+
+  // The next prompt is a plain execution task with nothing to do with the
+  // stale concurrency gate — it must pass through invisibly, exactly like any
+  // other execution prompt, NOT be treated as "answering" the old gate.
+  const out = runHook('user-prompt-submit.ts', {
+    session_id: SESSION, cwd: tmpDir,
+    prompt: 'add a logout button to the navbar component',
+  });
+  assert.strictEqual(out, null, 'an unrelated prompt after /hone:on must not be hijacked as a stale gate answer');
+  assert.notStrictEqual(sessionFile().gate, 'answered', 'the stale gate must not have been silently answered');
+
+  // No phantom skill/counter signal from a task the user never engaged with.
+  const profile = profileFile();
+  assert.strictEqual(profile.counters.gates_answered ?? 0, 0);
+  assert.strictEqual(profile.skills['concurrency']?.reps ?? 0, 0);
+});
+
 test('malformed stdin and corrupt state fail open (exit 0, no output)', () => {
   const out = execFileSync('node', [path.join(ROOT, 'hooks', 'user-prompt-submit.ts')], {
     input: 'this is not json{{{',

@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as yaml from './yaml.ts';
 import * as state from './state.ts';
-import type { HoneConfig, RuntimeState, YamlMap } from './types.ts';
+import type { HoneConfig, HoneSettings, RuntimeState, YamlMap } from './types.ts';
 
 // Defaults mirror PRD §11. config.yaml (user-owned) overrides these;
 // state.json runtime toggles (set by /hone commands) override config.yaml.
@@ -77,14 +77,33 @@ export function effective(config: HoneConfig, runtime: RuntimeState = {}): HoneC
   const hintLevel = clampHint(
     Number.isInteger(runtime.hint_level) ? (runtime.hint_level as number) : hone.hint_level,
   );
+  const learningBudget = clampBudget(
+    Number.isInteger(runtime.learning_budget) ? (runtime.learning_budget as number) : hone.learning_budget,
+  );
+  const reflection =
+    normalizeReflection(runtime.reflection) ?? normalizeReflection(hone.reflection) ?? 'on';
   const result = clone(config);
-  result.hone = { ...clone(hone), enabled, hint_level: hintLevel };
+  result.hone = { ...clone(hone), enabled, hint_level: hintLevel, learning_budget: learningBudget, reflection };
   return result;
 }
 
 export function clampHint(n: unknown): number {
   if (!Number.isInteger(n)) return 0; // fall back to the shipped default
   return Math.min(5, Math.max(0, n as number));
+}
+
+// /hone:budget — same defensive-clamp pattern as clampHint: applied whether
+// the value came from the runtime override or straight from config.yaml, so
+// a hand-edited out-of-range (or stringly-typed, e.g. `learning_budget: "50"`)
+// value can never escape into budget.decide() unnormalized.
+export function clampBudget(n: unknown): number {
+  const num = Number(n);
+  if (!Number.isFinite(num)) return 100; // fall back to the shipped default
+  return Math.min(100, Math.max(0, num));
+}
+
+function normalizeReflection(v: unknown): HoneSettings['reflection'] | undefined {
+  return v === 'off' || v === 'optional' || v === 'on' ? v : undefined;
 }
 
 // Write a commented starter config on first run — the config file doubles as
