@@ -2,7 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import {
   recordOutcome,
+  recordSkip,
+  bktUpdate,
+  isSubstantiveAnswer,
   proficiencyOf,
+  staleSkills,
+  STALE_DROP,
   adaptiveAdjustment,
   effectiveHint,
   coachingHint,
@@ -17,6 +22,7 @@ import {
   COLD_START_REPS,
   COLD_START_HINT_FLOOR,
   DEBUG_HINT_CEILING,
+  GRACE_SKIP_RESERVE,
 } from '../lib/skills.ts';
 import type { Profile } from '../lib/types.ts';
 
@@ -99,12 +105,64 @@ test('independent reps raise proficiency; assisted reps lower it', () => {
   assert.strictEqual(s.assisted_reps, 1);
 });
 
-test('proficiency clamps to [0,100] under long streaks', () => {
+test('BKT: independent streak saturates near mastery; assisted streak sinks; always in [0,100]', () => {
   const p = freshProfile();
   for (let i = 0; i < 100; i++) recordOutcome(p, 'security', { independent: true });
-  assert.strictEqual(proficiencyOf(p, 'security'), 100);
+  const high = proficiencyOf(p, 'security');
+  assert.ok(high >= 95 && high <= 100, `mastery should saturate high, got ${high}`);
   for (let i = 0; i < 100; i++) recordOutcome(p, 'security', { independent: false });
-  assert.strictEqual(proficiencyOf(p, 'security'), 0);
+  const low = proficiencyOf(p, 'security');
+  assert.ok(low >= 0 && low < BASELINE, `assisted streak should sink below neutral, got ${low}`);
+});
+
+test('BKT regression: an assisted outcome lowers even a maxed skill (no absorbing state at p=1)', () => {
+  // The degeneracy Beck & Chang (2007) warn about: without clamping the working
+  // probability off 1, P(known|incorrect) stays 1 and proficiency freezes at
+  // 100. With the clamp, an assisted rep must still pull it down.
+  assert.ok(bktUpdate(100, false) < 100, 'assisted must lower a maxed skill');
+  assert.ok(bktUpdate(0, true) > 0, 'independent must raise a floored skill');
+  assert.ok(bktUpdate(50, true) > 50, 'independent raises from neutral');
+  assert.ok(bktUpdate(50, false) < 50, 'assisted lowers from neutral');
+  // Assisted lowers from any non-floored state; independent raises from any
+  // non-saturated state. (At the extreme floor/ceiling the learning-transit
+  // term dominates — expected BKT behavior — but never out of [0,100].)
+  for (const start of [30, 50, 70, 90, 100]) {
+    assert.ok(bktUpdate(start, false) < start, `assisted should lower from ${start}`);
+  }
+  for (const start of [0, 10, 30, 50, 70]) {
+    assert.ok(bktUpdate(start, true) > start, `independent should raise from ${start}`);
+  }
+  for (const start of [0, 50, 100]) {
+    assert.ok(bktUpdate(start, true) <= 100 && bktUpdate(start, false) >= 0, 'stays in [0,100]');
+  }
+});
+
+test('rubber-stamp gate replies are not substantive; real approaches (even terse) are', () => {
+  for (const rubber of ['ok', 'okay', 'sure', 'yes', 'you decide', 'idk', 'just do it', 'lgtm', 'whatever']) {
+    assert.strictEqual(isSubstantiveAnswer(rubber), false, `"${rubber}" is a rubber stamp`);
+  }
+  for (const real of ['use a mutex', 'row-level locking, i think', 'ok but let us use a queue for backpressure']) {
+    assert.strictEqual(isSubstantiveAnswer(real), true, `"${real}" is a real approach`);
+  }
+  assert.strictEqual(isSubstantiveAnswer(''), false);
+  assert.strictEqual(isSubstantiveAnswer(null), false);
+});
+
+test('grace-skip: the first skips in a category are penalty-free, then skips count as assisted', () => {
+  const p = freshProfile();
+  for (let i = 0; i < GRACE_SKIP_RESERVE; i++) {
+    const { penalized } = recordSkip(p, 'concurrency');
+    assert.strictEqual(penalized, false, `skip ${i + 1} should be within the grace reserve`);
+  }
+  // Reserve spent, no proficiency movement, no assisted rep yet.
+  assert.strictEqual(proficiencyOf(p, 'concurrency'), BASELINE);
+  assert.strictEqual(p.skills['concurrency']?.assisted_reps, 0);
+  assert.strictEqual(p.skills['concurrency']?.grace_skips_used, GRACE_SKIP_RESERVE);
+  // The next skip is penalized.
+  const beyond = recordSkip(p, 'concurrency');
+  assert.strictEqual(beyond.penalized, true);
+  assert.strictEqual(p.skills['concurrency']?.assisted_reps, 1);
+  assert.ok(proficiencyOf(p, 'concurrency') < BASELINE, 'a skip past the reserve lowers proficiency');
 });
 
 test('adaptive is a no-op at neutral proficiency (preserves exact-budget guarantee)', () => {
@@ -190,6 +248,28 @@ test('F9: debugging earns independence more slowly than other skills', () => {
   assert.strictEqual(graduated(p, 'debugging'), false, 'debugging needs more reps');
   p.skills['debugging']!.reps = DEBUG_GRADUATE_REPS;
   assert.strictEqual(graduated(p, 'debugging'), true);
+});
+
+test('staleSkills surfaces only skills that decayed past the threshold, most-stale first', () => {
+  const p = freshProfile();
+  const monthsAgo = new Date(Date.now() - 20 * 7 * 24 * 3600 * 1000).toISOString();
+  const fresh = new Date().toISOString();
+  // Idle & strong -> decays well past the threshold.
+  p.skills['concurrency'] = { proficiency: 90, reps: 12, independent_reps: 12, assisted_reps: 0, last_updated: monthsAgo };
+  // Idle a little less far -> smaller drop, but still over the threshold.
+  const weeksAgo = new Date(Date.now() - 12 * 7 * 24 * 3600 * 1000).toISOString();
+  p.skills['security'] = { proficiency: 80, reps: 10, independent_reps: 10, assisted_reps: 0, last_updated: weeksAgo };
+  // Recently active -> not stale.
+  p.skills['debugging'] = { proficiency: 88, reps: 12, independent_reps: 12, assisted_reps: 0, last_updated: fresh };
+  // Never recorded (no last_updated) -> never stale.
+  p.skills['performance'] = { proficiency: 70, reps: 2, independent_reps: 2, assisted_reps: 0, last_updated: null };
+
+  const stale = staleSkills(p);
+  const names = stale.map((s) => s.category);
+  assert.ok(names.includes('concurrency') && names.includes('security'));
+  assert.ok(!names.includes('debugging') && !names.includes('performance'));
+  assert.strictEqual(stale[0]!.category, 'concurrency', 'most-stale first');
+  assert.ok(stale.every((s) => s.raw - s.decayed >= STALE_DROP));
 });
 
 test('ensureSkill self-heals a corrupt/hand-edited skill entry', () => {

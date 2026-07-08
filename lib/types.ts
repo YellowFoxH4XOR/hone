@@ -33,9 +33,6 @@ export interface SessionState {
   // F5: auto-feedback fires at most once per coached task; reset when a new
   // gate opens.
   feedback_given?: boolean;
-  // F6: reflection fires at most once per session (stop_hook_active was
-  // removed from the API, so we guard the Stop-hook loop ourselves).
-  reflection_done?: boolean;
   // F10: interview mode — every prompt becomes interviewer-style questioning
   // and file edits are blocked until `/hone:interview stop`.
   interview_mode?: boolean;
@@ -66,8 +63,9 @@ export interface SkillStats {
   proficiency: number;
   reps: number; // coached tasks in this category
   independent_reps: number; // gate answered at a low hint level (worked it themselves)
-  assisted_reps: number; // skipped, or leaned on a high hint level
+  assisted_reps: number; // skipped past the grace reserve, or leaned on a high hint level
   last_updated: string | null;
+  grace_skips_used?: number; // penalty-free /hone:skip uses spent in this category
 }
 
 export interface Profile {
@@ -78,6 +76,10 @@ export interface Profile {
   skills: Record<string, SkillStats>;
   hint_history: Array<{ at: string; level: number }>;
   last_active_at?: string;
+  // F6: a coached session ended with work worth reflecting on. Queued at Stop
+  // and surfaced (non-blocking) at the NEXT session start — a delayed recall is
+  // both better for retention and far lower friction than blocking at exit.
+  pending_reflection?: { category: string; at: string } | null;
 }
 
 export interface AdaptiveAdjustment {

@@ -60,9 +60,12 @@ vanilla Claude Code, and nothing counts against the budget.
 - **Auto-feedback** — after code is written during a coached task, Hone gives a
   short senior-lens review (edge cases, failure modes, one thing to check) so
   you learn what to look for. It never silently rewrites your code.
-- **Reflection** — once per coached session, Hone asks for a quick recap ("what
-  was hardest? explain it back without looking"). On by default — reflection is
-  the consolidation step; set `reflection: optional` or `off` to soften it.
+- **Reflection** — after a coached session, Hone asks for a quick recap ("what
+  was hardest? explain it back without looking") — but at the *start of your next
+  session*, not by blocking you on the way out. A recall after a delay predicts
+  retention far better than one made on the spot, and the end of a session is the
+  worst moment to add friction. It's non-blocking (answer it or wave it off) and
+  on by default; set `reflection: optional` or `off` to soften it.
 - **Skill profile & adaptive coaching** — Hone keeps a per-category proficiency
   profile (see `/hone:status`) that moves as you work: up when you engage a gate
   at a low hint level, down when you skip or lean on full solutions. With
@@ -102,7 +105,7 @@ ship a compiled fallback.)
 | Command | Effect |
 |---|---|
 | `/hone:status` | Hint level, budget usage, gate state, skill profile |
-| `/hone:skip` | Skip the gate for the current task — implement directly |
+| `/hone:skip` | Skip the gate for the current task — implement directly (first couple per topic are penalty-free) |
 | `/hone:wrong [note]` | Report a misclassification — logs it locally, unblocks the gate with no proficiency penalty |
 | `/hone:interview [topic]` | Interview mode: Claude probes your understanding, no code written (`stop` to end) |
 | `/hone:dashboard` | Local skill-profile dashboard at `http://127.0.0.1:4173` (`stop` to end) |
@@ -151,11 +154,16 @@ prompt against signal families: diagnostic language ("only fails in CI",
 and distributed-systems reasoning, security questions, performance
 investigation, algorithmic work, and concept-understanding questions.
 
-Design bias: **execution wins every tie.** On our labeled test sets (in-repo,
-including an independently generated adversarial set), execution→coaching
-misclassification — the annoying direction — is under 2%; the PRD requirement
-is <5%. If Hone ever coaches you on a task that didn't deserve it, that's a
-bug: open an issue with the prompt.
+Design bias: **execution wins every tie** — including a *closing-clause
+override*, so a question that ends in an explicit instruction ("why does this
+deadlock? just add a timeout for now") routes to execution: you already decided,
+no gate. The tuned in-repo datasets were adjusted during development, so the
+number that actually means something is the **held-out set** — fresh prompts
+written after the signal lists were frozen and never used to tune them. On it,
+execution→coaching misclassification (the annoying direction) is **0%** and
+learning recall is ~92%; the PRD requirement is <5% false-coach. If Hone ever
+coaches you on a task that didn't deserve it, that's a bug: open an issue with
+the prompt.
 
 ## Privacy
 
@@ -187,7 +195,7 @@ generated from *your* repo). See `docs/PRD.md`.
 ## Development
 
 ```
-npm test             # 90 tests: unit, labeled-dataset accuracy, end-to-end hooks
+npm test             # 100+ tests: unit, labeled-dataset accuracy, end-to-end hooks
 npm run typecheck    # tsc --noEmit (strict, erasable-syntax-only)
 ```
 

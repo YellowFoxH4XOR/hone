@@ -1,0 +1,37 @@
+{
+  "_comment": "Held-out evaluation set (PR: classifier integrity). Written AFTER the signal lists were frozen and never used to tune them — the point is to measure how the classifier generalizes to unseen phrasing, not to be patched until it scores 100%. Includes closing-clause cases (a question that ends in an explicit instruction, which must route to execution — the user already decided). Reported numbers are honest, not marketed.",
+  "prompts": [
+    { "prompt": "the checkout worker double-charges a card if the webhook retries — where's the race?", "expected": "learning", "category": "concurrency" },
+    { "prompt": "our nightly export sometimes drops a few thousand rows and I have no idea why", "expected": "learning", "category": "debugging" },
+    { "prompt": "should the billing service own its own copy of the customer table or read from the core db?", "expected": "learning", "category": "architecture" },
+    { "prompt": "walk me through how the event loop actually schedules microtasks vs timers", "expected": "learning", "category": "new_framework" },
+    { "prompt": "what's a sane way to make this payment endpoint safe to retry without double-applying it?", "expected": "learning", "category": "distributed_systems" },
+    { "prompt": "the p99 on the search endpoint tripled overnight and the query didn't change", "expected": "learning", "category": "performance" },
+    { "prompt": "is storing the refresh token in localStorage actually a problem here or am I being paranoid", "expected": "learning", "category": "security" },
+    { "prompt": "trying to figure out why the consumer group keeps rebalancing every couple minutes", "expected": "learning", "category": "debugging" },
+    { "prompt": "how would you shard this so a single hot tenant doesn't take down everyone else", "expected": "learning", "category": "system_design" },
+    { "prompt": "what's the time complexity of this nested scan and can it be brought down", "expected": "learning", "category": "algorithms" },
+    { "prompt": "the cache stampede on cold start is melting the db — how do people normally prevent that", "expected": "learning", "category": "performance" },
+    { "prompt": "I'm new to Rust's ownership model and this borrow checker error makes no sense to me", "expected": "learning", "category": "new_framework" },
+
+    { "prompt": "why does this deadlock under load? just add a timeout and retry for now.", "expected": "execution", "category": "concurrency" },
+    { "prompt": "what's the cleanest way to structure this — actually never mind, just extract it into a helper.", "expected": "execution", "category": "refactoring" },
+    { "prompt": "how should tokens be stored for this? go ahead and put them in an httpOnly cookie.", "expected": "execution", "category": "security" },
+    { "prompt": "not sure why the query is slow but let's just add an index on user_id and move on", "expected": "execution", "category": "performance" },
+    { "prompt": "is this the idiomatic way to do it in Go? whatever, just make it compile.", "expected": "execution", "category": "new_framework" },
+
+    { "prompt": "add a DELETE /api/comments/:id endpoint with soft-delete", "expected": "execution", "category": "crud" },
+    { "prompt": "write unit tests for the invoice total calculator", "expected": "execution", "category": "tests" },
+    { "prompt": "bump the eslint config to the new flat format and fix the warnings", "expected": "execution", "category": "formatting" },
+    { "prompt": "rename the UserSvc class to AccountService everywhere", "expected": "execution", "category": "renames" },
+    { "prompt": "scaffold a new Vite + React + TypeScript project in packages/admin", "expected": "execution", "category": "boilerplate" },
+    { "prompt": "generate a migration to add a nullable `archived_at` timestamp to orders", "expected": "execution", "category": "migrations" },
+    { "prompt": "build a responsive pricing card component with a dark mode variant", "expected": "execution", "category": "react_components" },
+    { "prompt": "update the README install section to mention the new peer dependency", "expected": "execution", "category": "documentation" },
+    { "prompt": "extract the retry loop into a reusable withRetry() wrapper", "expected": "execution", "category": "refactoring" },
+    { "prompt": "find and replace all the console.log calls with the logger", "expected": "execution", "category": "renames" },
+    { "prompt": "add a POST /webhooks/stripe handler that verifies the signature", "expected": "execution", "category": "crud" },
+    { "prompt": "run prettier across the src directory", "expected": "execution", "category": "formatting" },
+    { "prompt": "set up a GitHub Actions workflow that runs the test suite on push", "expected": "execution", "category": "boilerplate" }
+  ]
+}

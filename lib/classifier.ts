@@ -349,6 +349,24 @@ const INTERROGATIVE = /^(why|how|what|when|where|which|should|is|are|does|do|can
 
 const IMPERATIVE = /^(add|write|create|generate|make|build|update|change|fix|rename|move|delete|remove|drop|bump|install|set ?up|setup|format|lint|refactor|convert|extract|run|deploy|commit|push|merge|revert|apply|copy|paste|replace|implement|wire|hook)\b/;
 
+// A decisive closing instruction anywhere in the prompt — the user has ALREADY
+// picked the approach and is telling us to just do it ("...just add a timeout
+// and retry for now"). The leading-anchored INTERROGATIVE/IMPERATIVE checks
+// can't see this, so a question that ends in a command used to read as pure
+// learning and (wrongly) opened the gate.
+const DECISIVE_CLOSER =
+  /\b(just|simply|go ahead and|let'?s just|for now,? just|can you just|please just)\s+(add|use|make|write|put|set|create|do|implement|change|fix|apply|wire|update|remove|delete|drop|refactor|move|rename|run|build|generate)\b/;
+
+// The last sentence/clause of the prompt, lowercased. Splitting on sentence
+// terminators and newlines is enough to catch "…? Now do X." style closers.
+function lastClause(lower: string): string {
+  const parts = lower
+    .split(/[.!?\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts.length ? parts[parts.length - 1]! : lower.trim();
+}
+
 export function classify(prompt: unknown): Classification {
   const text = String(prompt ?? '').trim();
   const lower = text.toLowerCase();
@@ -393,13 +411,28 @@ export function classify(prompt: unknown): Classification {
 
   // Phrasing adjustments: questions lean learning (only if a learning signal
   // already fired — never invent learning from tone alone); imperative openers
-  // lean execution.
+  // and closing instructions lean execution.
   let learnScore = bestLearn.score;
   let execScore = bestExec.score;
-  if (learnScore > 0 && (INTERROGATIVE.test(lower) || /\?\s*$/.test(text))) {
+
+  // Closing-clause override: a prompt that ENDS in an explicit instruction means
+  // the user already made the call — don't hand them a Socratic gate. A decisive
+  // closer ("just add X for now") is a strong execution signal and cancels the
+  // "this is a question" learning bonus; a plain trailing imperative sentence
+  // (distinct from the opener) is a milder one.
+  const decisiveCloser = DECISIVE_CLOSER.test(lower);
+  const closer = lastClause(lower);
+  const plainClosingImperative = !decisiveCloser && closer !== lower && IMPERATIVE.test(closer);
+
+  if (learnScore > 0 && !decisiveCloser && (INTERROGATIVE.test(lower) || /\?\s*$/.test(text))) {
     learnScore += 1;
   }
   if (IMPERATIVE.test(lower)) {
+    execScore += 1;
+  }
+  if (decisiveCloser) {
+    execScore += 2;
+  } else if (plainClosingImperative) {
     execScore += 1;
   }
 

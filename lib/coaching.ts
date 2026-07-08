@@ -130,19 +130,34 @@ export function autoFeedbackContext(opts: { category: string; reviewOnly: boolea
   return lines.join('\n');
 }
 
-// F6 reflection: the Stop-hook block reason. Making Claude ask the user to
-// recap consolidates the learning; it fires at most once per coached session.
-export function reflectionPrompt(opts: { category: string }): string {
+// F6 reflection, DEFERRED. Surfaced (non-blocking) at the START of the session
+// after a coached one, rather than by blocking at exit. A judgment made after a
+// delay predicts real retention far better than one made immediately (Nelson &
+// Dunlosky 1991, the delayed-JOL effect), and asking as the user is trying to
+// leave is the worst-timed, highest-friction moment there is (Eleftheriou et
+// al., CHIWORK'26, flag it as an abandonment risk). Kept embedded-but-gentle
+// rather than an opt-in link, which sees ~10% uptake (Kumar et al. 2024).
+export function deferredReflectionContext(opts: { category: string }): string {
   return [
     '<hone-reflection>',
-    `Hone: a coached ${opts.category} task just wrapped. Before ending, ask a brief reflection to consolidate the learning:`,
-    'Ask the user, warmly and briefly, 1-2 of these — whichever fit what they just did:',
-    '- What was the hardest part, and what finally made it click?',
-    '- What would you do differently if you hit this again?',
-    '- In one or two sentences, explain the solution back without looking.',
-    'Keep it to a couple of sentences of framing.',
+    `Hone: last session included a coached ${opts.category} task. Before diving into new work, warmly and briefly invite the user to recall it — a short delayed recall is where the learning consolidates:`,
+    'Ask 1 of these, whichever fits what they did:',
+    '- What was the trickiest part, and what finally made it click?',
+    '- What would you do differently if you hit it again?',
+    '- In a sentence or two, explain the solution back without looking.',
+    'One or two sentences of framing, then let them answer or wave it off — never block their actual request on it.',
     '</hone-reflection>',
   ].join('\n');
+}
+
+// A gentle spacing nudge for the session-start line: a skill the user built has
+// drifted from disuse and is worth a light touch before it fades (Cepeda et al.
+// 2006). One line, never blocking.
+export function stalenessNudge(opts: { category: string }): string {
+  return (
+    `Heads up: your ${opts.category} skill has gone quiet and is drifting from disuse. ` +
+    "If today's work touches it, that's a good place to stay hands-on; if not, a quick self-quiz keeps it sharp."
+  );
 }
 
 // SessionStart: one terse line of standing context so Claude knows Hone
