@@ -3,7 +3,12 @@
 All notable changes to Hone are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.5.0] — 2026-07-08
+
+Research-backed calibration — a learning-science, arXiv, and product review turned
+into five bug fixes and evidence-based defaults: autonomy-supportive coaching,
+consolidation before critique, cold-start guidance instead of hint-0 for novices,
+a principled (BKT) skill profile, and better-timed reflection.
 
 ### Changed
 - **Reflection is now deferred to the next session, not blocked at Stop.** F6
