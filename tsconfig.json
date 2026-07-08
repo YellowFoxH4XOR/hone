@@ -14,5 +14,5 @@
     "forceConsistentCasingInFileNames": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["lib", "hooks", "bin", "statusline", "test"]
+  "include": ["lib", "hooks", "bin", "statusline", "test", "opencode"]
 }

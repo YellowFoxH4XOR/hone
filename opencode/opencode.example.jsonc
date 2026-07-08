@@ -1,0 +1,16 @@
+// Example OpenCode config showing Hone enabled. Place at the project root as
+// `opencode.json`, or merge into your global `~/.config/opencode/opencode.json`.
+//
+// This assumes the re-export shim at ~/.config/opencode/plugins/hone.ts (see
+// docs/OPENCODE.md) — with that in place, OpenCode auto-loads the plugin and
+// you do NOT need to list it here. This file is only a reference for the
+// npm-package install form, where you reference Hone by package name instead:
+{
+  "$schema": "https://opencode.ai/config.json",
+  // If you install Hone as an npm package that exports the plugin, list it here:
+  "plugin": [
+    // "hone-claude-plugin"
+  ]
+  // Hone reads its own config from ~/.claude/hone/config.yaml (or HONE_STATE_DIR),
+  // shared with the Claude Code build — nothing Hone-specific goes in opencode.json.
+}

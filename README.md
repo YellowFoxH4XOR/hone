@@ -4,10 +4,15 @@
 
 **Ship fast. Stay sharp.**
 
-Hone is a Claude Code plugin that selectively turns the AI from an *author* into a
-*reviewer and mentor* — on the small fraction of tasks where doing the thinking
-yourself is what keeps you promotable, interview-ready, and worth your title.
-On everything else, it is completely invisible.
+Hone is a plugin for **Claude Code and [OpenCode](https://opencode.ai)** that
+selectively turns the AI from an *author* into a *reviewer and mentor* — on the
+small fraction of tasks where doing the thinking yourself is what keeps you
+promotable, interview-ready, and worth your title. On everything else, it is
+completely invisible.
+
+> **On OpenCode?** Same Hone, wired to OpenCode's plugin API — see
+> [`docs/OPENCODE.md`](docs/OPENCODE.md). State is shared with the Claude Code
+> build, so one skill profile follows you across both tools.
 
 > Anthropic's own research (Jan 2026) found developers who leaned on AI to learn an
 > unfamiliar library scored ~17 points lower on comprehension than hand-coders —

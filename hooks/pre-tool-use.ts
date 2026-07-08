@@ -12,34 +12,9 @@ import * as state from '../lib/state.ts';
 import * as configLib from '../lib/config.ts';
 import * as gate from '../lib/gate.ts';
 import * as coaching from '../lib/coaching.ts';
+import { isFileWritingBash } from '../lib/bashwrite.ts';
 
 const FILE_WRITING_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
-
-// Bash patterns that modify files or repo state. Not exhaustive — the gate is
-// a speed bump, not a jail (see README "Known limitations").
-const BASH_WRITE_PATTERNS: RegExp[] = [
-  /<<-?\s*['"]?\w+/, // heredocs
-  /\btee\b/,
-  /\bsed\b[^|]*-i/,
-  /\b(mv|cp|rm|touch|mkdir|rmdir|truncate|dd|ln)\b/,
-  /\b(npm|pnpm|yarn)\s+(i|install|add|remove|uninstall)\b/,
-  /\bpip3?\s+install\b/,
-  /\bcargo\s+(add|install)\b/,
-  /\bgit\s+(commit|apply|checkout|restore|stash|merge|rebase|cherry-pick|reset|clean)\b/,
-  /\b(chmod|chown)\b/,
-];
-
-// A '>' means a file write ONLY after discounting the harmless forms that
-// read-only commands use constantly: stderr merges (2>&1), null sinks
-// (>/dev/null), and arrow tokens inside inline scripts or grep patterns.
-function hasFileRedirect(command: string): boolean {
-  const cleaned = command
-    .replace(/\d?>&\d/g, '')
-    .replace(/[\d&]?>+\s*\/dev\/null/g, '')
-    .replace(/=>/g, '')
-    .replace(/->/g, '');
-  return />/.test(cleaned);
-}
 
 function deny(reason: string): void {
   emit({
@@ -75,7 +50,7 @@ run(async (input) => {
     const command = String(input.tool_input?.command ?? '');
     // The /hone:skip and /hone:interview escape hatches must always work.
     if (command.includes('hone-ctl')) return;
-    if (hasFileRedirect(command) || BASH_WRITE_PATTERNS.some((re) => re.test(command))) {
+    if (isFileWritingBash(command)) {
       deny(reason);
     }
   }
